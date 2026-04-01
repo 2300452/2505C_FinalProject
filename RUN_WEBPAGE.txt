@@ -1,0 +1,139 @@
+PATIENT BUDDY - HOW TO RUN
+
+This project has 2 parts:
+1. Frontend = React + Vite
+2. Backend = FastAPI + SQLite
+
+What you need first:
+- Node.js 20 or newer
+- Python 3.11 recommended
+- Windows or macOS
+
+PROJECT FOLDER STRUCTURE
+- jarvisbuddy-main/frontend
+- jarvisbuddy-main/backend
+
+IMPORTANT
+- The backend already uses a local SQLite database file.
+- The included database file is:
+  backend/patient_buddy.db
+- Uploaded videos will be stored in:
+  backend/uploads
+- The default root admin account is:
+  Email: admin@patientbuddy.com
+  Password: Admin123!
+
+========================================
+STEP 1 - START THE BACKEND
+========================================
+Open Terminal, Command Prompt, or PowerShell inside:
+jarvisbuddy-main/backend
+
+WINDOWS OPTION
+Run these commands:
+
+python -m venv venv
+venv\Scripts\activate
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+python -m uvicorn app.main:app
+
+If Python uses the launcher on your PC, you can use:
+
+py -m venv venv
+venv\Scripts\activate
+py -m pip install --upgrade pip
+pip install -r requirements.txt
+py -m uvicorn app.main:app
+
+MACOS OPTION
+Run these commands:
+
+python3 -m venv venv
+source venv/bin/activate
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+python -m uvicorn app.main:app
+
+If it starts properly, the backend should run on:
+http://localhost:8000
+
+Keep this terminal open.
+
+========================================
+STEP 2 - START THE FRONTEND
+========================================
+Open a SECOND terminal inside:
+jarvisbuddy-main/frontend
+
+WINDOWS OPTION
+Run these commands:
+
+npm install
+npm run dev
+
+MACOS OPTION
+Run these commands:
+
+npm install
+npm run dev -- --host 127.0.0.1
+
+If it starts properly, the frontend should run on something like:
+http://localhost:5173
+
+Open that frontend URL in the browser.
+
+========================================
+STEP 3 - LOGIN
+========================================
+When the webpage opens:
+- choose Staff for admin/doctor login
+- choose Patient for patient login
+
+Default root admin / breakglass account:
+- Email: admin@patientbuddy.com
+- Password: Admin123!
+
+========================================
+NOTES
+========================================
+- Do not delete backend/patient_buddy.db if you want to keep the current data.
+- If you want a fresh empty database, delete patient_buddy.db and restart the backend.
+- The frontend talks to the backend on localhost:8000.
+- The upload page now sends the real video file to the backend.
+- Supported video formats include: .mp4, .mov, .avi, .webm, .mkv
+
+========================================
+TROUBLESHOOTING
+========================================
+If frontend fails:
+- make sure Node.js is installed
+- run npm install again in the frontend folder
+
+If backend fails:
+- make sure Python is installed
+- make sure the virtual environment is activated
+- run pip install -r requirements.txt again
+- if you previously created the virtual environment before the latest fixes, rerun:
+  pip install -r requirements.txt
+
+If macOS says command not found for python:
+- use python3 instead of python
+
+If macOS blocks installation tools:
+- install Xcode Command Line Tools with:
+  xcode-select --install
+
+If login page opens but cannot connect:
+- make sure backend is running first
+- check that http://localhost:8000 is reachable
+
+If video upload fails:
+- make sure the backend is running
+- make sure you selected a supported video file
+- check that the file is smaller than the backend upload limit
+
+Optional developer mode:
+- if you want auto-reload later, you can try:
+  python -m uvicorn app.main:app --reload
+- if --reload gives an Operation not permitted error on your machine, use the non-reload command above
