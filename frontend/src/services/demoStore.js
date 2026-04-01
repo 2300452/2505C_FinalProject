@@ -86,14 +86,17 @@ export async function createStaffUser({
   }
 }
 
-export async function createPatient({ name, email, password, dob, phone }) {
+export async function createPatient({ name, email, password, dob, gender, phone, allergies, existingConditions }) {
   try {
     const response = await api.post("/auth/signup", {
       name,
       email,
       password,
       dob: dob || null,
+      gender: gender || null,
       phone: phone || null,
+      allergies: allergies || null,
+      existing_conditions: existingConditions || null,
     });
     return response.data;
   } catch (error) {
@@ -108,6 +111,9 @@ export async function updateCurrentUserProfile(userId, updates) {
       email: updates.email ?? null,
       phone: updates.phone ?? null,
       dob: updates.dob || null,
+      gender: updates.gender || null,
+      allergies: updates.allergies || null,
+      existing_conditions: updates.existingConditions || null,
       specialty: updates.specialty || null,
     });
     return response.data;
@@ -123,6 +129,9 @@ export async function updateManagedUserProfile(userId, updates) {
       email: updates.email ?? null,
       phone: updates.phone ?? null,
       dob: updates.dob || null,
+      gender: updates.gender || null,
+      allergies: updates.allergies || null,
+      existing_conditions: updates.existingConditions || null,
       specialty: updates.specialty || null,
       designation: updates.designation || null,
       reports_to_user_id:
@@ -264,6 +273,69 @@ export async function rescheduleAppointment(appointmentId, date, time) {
   }
 }
 
+export async function doctorRescheduleAppointment(appointmentId, doctorId, date, time) {
+  try {
+    await rescheduleAppointment(appointmentId, date, time);
+    const response = await api.post("/data/appointments/status", {
+      appointment_id: appointmentId,
+      doctor_user_id: doctorId,
+      status: "Rescheduled",
+    });
+    return response.data;
+  } catch (error) {
+    throw toError(error, "Failed to reschedule appointment.");
+  }
+}
+
+export async function completeAppointment(appointmentId, doctorId) {
+  try {
+    const response = await api.post("/data/appointments/status", {
+      appointment_id: appointmentId,
+      doctor_user_id: doctorId,
+      status: "Completed",
+    });
+    return response.data;
+  } catch (error) {
+    throw toError(error, "Failed to complete appointment.");
+  }
+}
+
+export async function getAppointmentConsultation(appointmentId) {
+  try {
+    const response = await api.get(`/data/appointments/${appointmentId}/consultation`);
+    return response.data;
+  } catch (error) {
+    throw toError(error, "Failed to load consultation.");
+  }
+}
+
+export async function saveAppointmentConsultation(appointmentId, payload) {
+  try {
+    const response = await api.post(`/data/appointments/${appointmentId}/consultation`, {
+      doctor_user_id: payload.doctorUserId,
+      medical_record_id: payload.medicalRecordId || null,
+      symptoms: payload.symptoms || "",
+      duration: payload.duration || "",
+      pain_level: payload.painLevel ?? null,
+      patient_complaints: payload.patientComplaints || "",
+      blood_pressure: payload.bloodPressure || "",
+      heart_rate: payload.heartRate || "",
+      physical_findings: payload.physicalFindings || "",
+      diagnosis: payload.diagnosis || "",
+      condition_severity: payload.conditionSeverity || "",
+      assessment_notes: payload.assessmentNotes || "",
+      medications: payload.medications || [],
+      follow_up_date: payload.followUpDate || null,
+      priority: payload.priority || "Normal",
+      notes_to_patient: payload.notesToPatient || "",
+      alert_flags: payload.alertFlags || [],
+    });
+    return response.data;
+  } catch (error) {
+    throw toError(error, "Failed to save consultation.");
+  }
+}
+
 export async function getAppointmentsForDoctor(doctorId) {
   try {
     const response = await api.get(`/data/appointments/doctor/${doctorId}`);
@@ -345,8 +417,16 @@ export async function getAllRecords() {
 }
 
 export async function getRecordById(recordId) {
-  const records = await getRecords();
-  return records.find((record) => record.id === recordId) || null;
+  try {
+    const response = await api.get(`/data/records/${recordId}`);
+    return response.data;
+  } catch (error) {
+    if (error?.response?.status === 404) {
+      const records = await getRecords();
+      return records.find((record) => String(record.id) === String(recordId)) || null;
+    }
+    throw toError(error, "Failed to load medical record.");
+  }
 }
 
 export async function getFailedAlerts() {

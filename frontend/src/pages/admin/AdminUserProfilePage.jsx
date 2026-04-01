@@ -40,6 +40,21 @@ const adminDesignations = [
   "Other",
 ];
 
+const GENDER_OPTIONS = ["Male", "Female", "Prefer not to say"];
+
+function calculateAgeFromDob(dob) {
+  if (!dob) return "";
+  const birthDate = new Date(dob);
+  if (Number.isNaN(birthDate.getTime())) return "";
+  const today = new Date();
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const monthDiff = today.getMonth() - birthDate.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+    age -= 1;
+  }
+  return age >= 0 ? age : "";
+}
+
 function designationOptions(role) {
   return role === "Doctor" ? doctorDesignations : adminDesignations;
 }
@@ -67,6 +82,9 @@ function AdminUserProfilePage() {
     email: "",
     phone: "",
     dob: "",
+    gender: "",
+    allergies: "",
+    existingConditions: "",
     specialty: "",
     designation: "",
     designationOther: "",
@@ -77,6 +95,10 @@ function AdminUserProfilePage() {
   const user = profile?.user ?? null;
   const appointments = profile?.appointments ?? [];
   const records = profile?.records ?? [];
+  const orderedRecords = [...records].sort(
+    (left, right) => new Date(right.createdAt || 0).getTime() - new Date(left.createdAt || 0).getTime()
+  );
+  const derivedAge = calculateAgeFromDob(form.dob);
 
   const showDob = user?.role === "Patient";
   const showSpecialty = user?.role === "Doctor";
@@ -100,6 +122,9 @@ function AdminUserProfilePage() {
       email: managedUser.email || "",
       phone: managedUser.phone || "",
       dob: managedUser.dob || "",
+      gender: managedUser.gender || "",
+      allergies: managedUser.allergies || "",
+      existingConditions: managedUser.existingConditions || "",
       specialty: managedUser.specialty || "",
       designation: designationState.designation,
       designationOther: designationState.designationOther,
@@ -188,6 +213,23 @@ function AdminUserProfilePage() {
                   value={form.phone}
                   onChange={(event) => setForm({ ...form, phone: event.target.value })}
                 />
+                <TextField
+                  label="Age"
+                  value={derivedAge !== "" ? derivedAge : user.age ?? ""}
+                  disabled
+                />
+                <TextField
+                  select
+                  label="Gender"
+                  value={form.gender}
+                  onChange={(event) => setForm({ ...form, gender: event.target.value })}
+                >
+                  {GENDER_OPTIONS.map((option) => (
+                    <MenuItem key={option} value={option}>
+                      {option}
+                    </MenuItem>
+                  ))}
+                </TextField>
                 {showDob && (
                   <TextField
                     type="date"
@@ -195,6 +237,20 @@ function AdminUserProfilePage() {
                     InputLabelProps={{ shrink: true }}
                     value={form.dob}
                     onChange={(event) => setForm({ ...form, dob: event.target.value })}
+                  />
+                )}
+                {showDob && (
+                  <TextField
+                    label="Allergies"
+                    value={form.allergies}
+                    onChange={(event) => setForm({ ...form, allergies: event.target.value })}
+                  />
+                )}
+                {showDob && (
+                  <TextField
+                    label="Existing Conditions"
+                    value={form.existingConditions}
+                    onChange={(event) => setForm({ ...form, existingConditions: event.target.value })}
                   />
                 )}
                 {showSpecialty && (
@@ -277,7 +333,7 @@ function AdminUserProfilePage() {
                         <Chip label={appointment.status} size="small" />
                       </Stack>
                       <Typography variant="body2">
-                        Patient: {appointment.patientName} ({appointment.patientGeneratedId})
+                        Patient ID: {appointment.patientGeneratedId}
                       </Typography>
                       <Typography variant="body2">
                         Doctor: {appointment.doctorName} {appointment.doctorGeneratedId ? `(${appointment.doctorGeneratedId})` : ""}
@@ -295,11 +351,11 @@ function AdminUserProfilePage() {
                 Medical Records
               </Typography>
 
-              {records.length === 0 ? (
+              {orderedRecords.length === 0 ? (
                 <Typography>No medical records found.</Typography>
               ) : (
                 <Stack spacing={2}>
-                  {records.map((record, index) => (
+                  {orderedRecords.map((record, index) => (
                     <AssessmentRecordCard key={record.id} record={record} index={index + 1} />
                   ))}
                 </Stack>

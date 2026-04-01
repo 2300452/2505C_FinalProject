@@ -2,11 +2,9 @@ import { useEffect, useState } from "react";
 import {
   Alert,
   Box,
-  Button,
   Card,
   CardContent,
   Stack,
-  TextField,
   Typography,
 } from "@mui/material";
 import { useParams } from "react-router-dom";
@@ -26,6 +24,9 @@ function DoctorPatientRecord() {
   const [records, setRecords] = useState([]);
   const [noteInput, setNoteInput] = useState({});
   const [message, setMessage] = useState("");
+  const orderedRecords = [...records].sort(
+    (left, right) => new Date(right.createdAt || 0).getTime() - new Date(left.createdAt || 0).getTime()
+  );
 
   const loadData = async () => {
     const [currentPatient, recordData] = await Promise.all([
@@ -84,56 +85,25 @@ function DoctorPatientRecord() {
             Patient Activity
           </Typography>
 
-          {records.length === 0 ? (
+          {orderedRecords.length === 0 ? (
             <Typography>No assessments or medical records found.</Typography>
           ) : (
             <Stack spacing={3}>
-              {records.map((record, index) => (
+              {orderedRecords.map((record, index) => (
                 <Box key={record.id}>
-                  <AssessmentRecordCard record={record} index={index + 1} />
-                </Box>
-              ))}
-            </Stack>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card sx={{ mt: 3 }}>
-        <CardContent>
-          <Typography variant="h6" gutterBottom>
-            Add Medical Record Note
-          </Typography>
-
-          {records.length === 0 ? (
-            <Typography>No assessment available to attach a note to.</Typography>
-          ) : (
-            <Stack spacing={2}>
-              {records.map((record) => (
-                <Box key={record.id} sx={{ border: "1px solid #ddd", borderRadius: 2, p: 2 }}>
-                  <Typography sx={{ mb: 1, fontWeight: 700 }}>
-                    Assessment: {record.testType} ({record.result || "Pending"})
-                  </Typography>
-                  <TextField
-                    label="Add doctor note"
-                    multiline
-                    rows={3}
-                    fullWidth
-                    value={noteInput[record.id] || ""}
-                    onChange={(e) =>
-                      setNoteInput({
-                        ...noteInput,
-                        [record.id]: e.target.value,
-                      })
+                  <AssessmentRecordCard
+                    record={record}
+                    index={index + 1}
+                    noteValue={noteInput[record.id] || ""}
+                    onNoteChange={(value) =>
+                      setNoteInput((current) => ({
+                        ...current,
+                        [record.id]: value,
+                      }))
                     }
+                    onAddNote={() => handleAddNote(record.id)}
+                    showNoteComposer
                   />
-
-                  <Button
-                    variant="contained"
-                    sx={{ mt: 2 }}
-                    onClick={() => handleAddNote(record.id)}
-                  >
-                    Add Note
-                  </Button>
                 </Box>
               ))}
             </Stack>

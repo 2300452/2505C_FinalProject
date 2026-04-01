@@ -6,6 +6,7 @@ import {
   Card,
   CardContent,
   Grid,
+  MenuItem,
   Stack,
   TextField,
   Typography,
@@ -13,6 +14,21 @@ import {
 } from "@mui/material";
 import { useAuth } from "../../contexts/AuthContext";
 import { updateCurrentUserProfile } from "../../services/demoStore";
+
+const GENDER_OPTIONS = ["Male", "Female", "Prefer not to say"];
+
+function calculateAgeFromDob(dob) {
+  if (!dob) return "";
+  const birthDate = new Date(dob);
+  if (Number.isNaN(birthDate.getTime())) return "";
+  const today = new Date();
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const monthDiff = today.getMonth() - birthDate.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+    age -= 1;
+  }
+  return age >= 0 ? age : "";
+}
 
 function UserProfilePage() {
   const { user, refreshUser, changeOwnPassword } = useAuth();
@@ -24,6 +40,9 @@ function UserProfilePage() {
     email: "",
     phone: "",
     dob: "",
+    gender: "",
+    allergies: "",
+    existingConditions: "",
     specialty: "",
   });
 
@@ -33,6 +52,7 @@ function UserProfilePage() {
   });
 
   const [message, setMessage] = useState("");
+  const derivedAge = calculateAgeFromDob(profileForm.dob);
 
   useEffect(() => {
     if (!user) return;
@@ -42,6 +62,9 @@ function UserProfilePage() {
       email: user.email || "",
       phone: user.phone || "",
       dob: user.dob || "",
+      gender: user.gender || "",
+      allergies: user.allergies || "",
+      existingConditions: user.existingConditions || "",
       specialty: user.specialty || "",
     });
   }, [user]);
@@ -53,6 +76,9 @@ function UserProfilePage() {
         email: profileForm.email,
         phone: profileForm.phone,
         dob: user.role === "Patient" ? profileForm.dob : "",
+        gender: profileForm.gender,
+        allergies: user.role === "Patient" ? profileForm.allergies : "",
+        existingConditions: user.role === "Patient" ? profileForm.existingConditions : "",
         specialty: user.role === "Doctor" ? profileForm.specialty : "",
       });
       await refreshUser();
@@ -118,6 +144,9 @@ function UserProfilePage() {
               <Typography sx={{ mb: 2 }}>
                 <strong>{user.role} ID:</strong> {user.generatedId}
               </Typography>
+              <Typography sx={{ mb: 2 }}>
+                <strong>Age:</strong> {derivedAge !== "" ? derivedAge : user.age ?? "-"}
+              </Typography>
 
               <Stack spacing={2}>
                 <TextField
@@ -138,6 +167,19 @@ function UserProfilePage() {
                   onChange={(e) => setProfileForm({ ...profileForm, phone: e.target.value })}
                 />
 
+                <TextField
+                  select
+                  label="Gender"
+                  value={profileForm.gender}
+                  onChange={(e) => setProfileForm({ ...profileForm, gender: e.target.value })}
+                >
+                  {GENDER_OPTIONS.map((option) => (
+                    <MenuItem key={option} value={option}>
+                      {option}
+                    </MenuItem>
+                  ))}
+                </TextField>
+
                 {user.role === "Patient" && (
                   <TextField
                     type="date"
@@ -145,6 +187,22 @@ function UserProfilePage() {
                     InputLabelProps={{ shrink: true }}
                     value={profileForm.dob}
                     onChange={(e) => setProfileForm({ ...profileForm, dob: e.target.value })}
+                  />
+                )}
+
+                {user.role === "Patient" && (
+                  <TextField
+                    label="Allergies"
+                    value={profileForm.allergies}
+                    onChange={(e) => setProfileForm({ ...profileForm, allergies: e.target.value })}
+                  />
+                )}
+
+                {user.role === "Patient" && (
+                  <TextField
+                    label="Existing Conditions"
+                    value={profileForm.existingConditions}
+                    onChange={(e) => setProfileForm({ ...profileForm, existingConditions: e.target.value })}
                   />
                 )}
 

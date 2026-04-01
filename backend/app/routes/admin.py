@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from ..db import get_db
@@ -52,6 +52,10 @@ def serialize_user(user: User) -> dict:
         "email": user.email,
         "phone": user.phone or "",
         "dob": user.dob.isoformat() if user.dob else "",
+        "age": calculate_age(user.dob),
+        "gender": user.gender or "",
+        "allergies": user.allergies or "",
+        "existingConditions": user.existing_conditions or "",
         "specialty": user.specialty or "",
         "designation": user.designation or "",
         "reportsToUserId": user.reports_to_user_id,
@@ -62,6 +66,13 @@ def serialize_user(user: User) -> dict:
         "isDeleted": user.is_deleted,
         "deletedAt": user.deleted_at.isoformat() if user.deleted_at else None,
     }
+
+
+def calculate_age(dob) -> int | None:
+    if not dob:
+        return None
+    today = date.today()
+    return today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
 
 
 def serialize_appointment(appointment: Appointment, users_by_id: dict[int, User]) -> dict:
@@ -127,6 +138,12 @@ def attach_role_specific_fields(user: User, payload: UserProfileUpdateRequest, d
     user.name = payload.name.strip() if payload.name is not None else user.name
     user.email = payload.email if payload.email is not None else user.email
     user.phone = payload.phone if payload.phone is not None else user.phone
+    if payload.gender is not None:
+        user.gender = payload.gender.strip() or None
+    if payload.allergies is not None:
+        user.allergies = payload.allergies.strip() or None
+    if payload.existing_conditions is not None:
+        user.existing_conditions = payload.existing_conditions.strip() or None
 
     if user.role == "Patient":
         if payload.dob is not None:

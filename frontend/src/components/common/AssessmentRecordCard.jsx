@@ -4,9 +4,11 @@ import {
   AccordionDetails,
   AccordionSummary,
   Box,
+  Button,
   Chip,
   Divider,
   Stack,
+  TextField,
   Typography,
 } from "@mui/material";
 import BenchmarkGauge from "../dashboard/BenchmarkGauge";
@@ -29,10 +31,70 @@ function getVideoSrc(videoUrl) {
   if (videoUrl.startsWith("http://") || videoUrl.startsWith("https://")) {
     return videoUrl;
   }
-  return `${API_BASE_URL}${videoUrl}`;
+  if (typeof window === "undefined") {
+    return videoUrl;
+  }
+
+  const resolvedApiUrl = new URL(API_BASE_URL || window.location.origin, window.location.origin);
+  return new URL(videoUrl, resolvedApiUrl.origin).toString();
+}
+
+function getVideoMimeType(fileName = "") {
+  const lowerName = fileName.toLowerCase();
+  if (lowerName.endsWith(".mp4")) return "video/mp4";
+  if (lowerName.endsWith(".mov")) return "video/quicktime";
+  if (lowerName.endsWith(".webm")) return "video/webm";
+  if (lowerName.endsWith(".avi")) return "video/x-msvideo";
+  if (lowerName.endsWith(".mkv")) return "video/x-matroska";
+  return undefined;
 }
 
 function renderAnalysis(record) {
+  if (record.testType === "Consultation" && record.consultation) {
+    const consultation = record.consultation;
+    return (
+      <Stack spacing={2}>
+        <Box>
+          <Typography variant="subtitle2" sx={{ mb: 1 }}>
+            SOAP Summary
+          </Typography>
+          <Typography variant="body2"><strong>S:</strong> {consultation.symptoms || "-"}</Typography>
+          <Typography variant="body2"><strong>Duration:</strong> {consultation.duration || "-"}</Typography>
+          <Typography variant="body2"><strong>Pain Level:</strong> {consultation.painLevel ?? "-"}</Typography>
+          <Typography variant="body2"><strong>Complaints:</strong> {consultation.patientComplaints || "-"}</Typography>
+          <Typography variant="body2"><strong>O:</strong> BP {consultation.bloodPressure || "-"} | HR {consultation.heartRate || "-"}</Typography>
+          <Typography variant="body2"><strong>Physical Findings:</strong> {consultation.physicalFindings || "-"}</Typography>
+          <Typography variant="body2"><strong>A:</strong> {consultation.diagnosis || "-"}</Typography>
+          <Typography variant="body2"><strong>Severity:</strong> {consultation.conditionSeverity || "-"}</Typography>
+          <Typography variant="body2"><strong>Plan Notes:</strong> {consultation.assessmentNotes || "-"}</Typography>
+        </Box>
+
+        <Box>
+          <Typography variant="subtitle2" sx={{ mb: 1 }}>
+            Medications
+          </Typography>
+          {consultation.medications?.length ? (
+            <Stack spacing={0.5}>
+              {consultation.medications.map((medication, index) => (
+                <Typography key={`${medication.medication_name}-${index}`} variant="body2">
+                  {medication.medication_name} • {medication.dosage || "-"} • {medication.frequency || "-"} • {medication.duration || "-"} • {medication.instructions || "-"}
+                </Typography>
+              ))}
+            </Stack>
+          ) : (
+            <Typography variant="body2">No medication prescribed.</Typography>
+          )}
+        </Box>
+
+        <Box>
+          <Typography variant="body2"><strong>Follow-Up Date:</strong> {consultation.followUpDate || "-"}</Typography>
+          <Typography variant="body2"><strong>Priority:</strong> {consultation.priority || "-"}</Typography>
+          <Typography variant="body2"><strong>Notes to Patient:</strong> {consultation.notesToPatient || "-"}</Typography>
+        </Box>
+      </Stack>
+    );
+  }
+
   const analysis = record.analysis?.analysis;
   const poseSummary = record.analysis?.pose_summary;
 
@@ -147,9 +209,17 @@ function renderAnalysis(record) {
   );
 }
 
-export default function AssessmentRecordCard({ record, index }) {
+export default function AssessmentRecordCard({
+  record,
+  index,
+  noteValue = "",
+  onNoteChange,
+  onAddNote,
+  showNoteComposer = false,
+}) {
   const videoSrc = getVideoSrc(record.videoUrl);
-  const label = `Assessment ${index}`;
+  const labelPrefix = record.testType === "Consultation" ? "Consultation" : "Assessment";
+  const label = `${labelPrefix} ${record.assessmentNumber ?? index}`;
 
   return (
     <Accordion sx={{ border: "1px solid #ddd", boxShadow: "none", "&:before": { display: "none" } }}>
@@ -161,7 +231,12 @@ export default function AssessmentRecordCard({ record, index }) {
           spacing={1}
           sx={{ width: "100%", pr: 1 }}
         >
-          <Typography variant="h6">{label}</Typography>
+          <Stack spacing={0.25}>
+            <Typography variant="h6">{label}</Typography>
+            <Typography variant="body2" color="text.secondary">
+              {record.createdAt ? new Date(record.createdAt).toLocaleString() : "-"}
+            </Typography>
+          </Stack>
           <Stack direction="row" spacing={1}>
             <Chip
               label={record.result || "Pending"}
@@ -175,64 +250,121 @@ export default function AssessmentRecordCard({ record, index }) {
         </Stack>
       </AccordionSummary>
       <AccordionDetails>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-          {record.testType} • {record.createdAt ? new Date(record.createdAt).toLocaleString() : "-"}
-        </Typography>
-
-        <Stack spacing={1}>
-          <Typography variant="body2">File: {record.fileName || "-"}</Typography>
-          <Typography variant="body2">Duration: {record.durationSeconds ?? "-"}s</Typography>
-          <Typography variant="body2">Resolution: {record.resolution || "-"}</Typography>
-          <Typography variant="body2">FPS: {record.fps ?? "-"}</Typography>
-          <Typography variant="body2">Doctor: {record.doctorName || "Not Assigned"}</Typography>
-          {record.alertStatus && <Typography variant="body2">Alert Status: {record.alertStatus}</Typography>}
-          {record.followUpAction && <Typography variant="body2">Follow Up: {record.followUpAction}</Typography>}
-          {record.followUpDueDate && <Typography variant="body2">Follow Up Due: {record.followUpDueDate}</Typography>}
-        </Stack>
-
-        {videoSrc && (
-          <Box sx={{ mt: 2 }}>
-            <Typography variant="subtitle2" sx={{ mb: 1 }}>
-              Uploaded Video
-            </Typography>
-            <Box
-              component="video"
-              controls
-              src={videoSrc}
-              sx={{
-                width: "100%",
-                maxHeight: 360,
-                borderRadius: 2,
-                backgroundColor: "#000",
-              }}
-            />
-          </Box>
-        )}
-
-        <Divider sx={{ my: 2 }} />
-        {renderAnalysis(record)}
-
-        {(record.notes || []).length > 0 && (
-          <>
-            <Divider sx={{ my: 2 }} />
-            <Box>
-              <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                Doctor Notes
-              </Typography>
-              <Stack spacing={1}>
-                {record.notes.map((note) => (
-                  <Box key={note.id} sx={{ border: "1px solid #ddd", borderRadius: 2, p: 1.5 }}>
-                    <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                      {note.doctorName} {note.doctorGeneratedId ? `(${note.doctorGeneratedId})` : ""}
-                    </Typography>
-                    <Typography variant="body2">{note.text}</Typography>
-                  </Box>
-                ))}
-              </Stack>
-            </Box>
-          </>
-        )}
+        <AssessmentRecordDetails
+          record={record}
+          videoSrc={videoSrc}
+          noteValue={noteValue}
+          onNoteChange={onNoteChange}
+          onAddNote={onAddNote}
+          showNoteComposer={showNoteComposer}
+        />
       </AccordionDetails>
     </Accordion>
+  );
+}
+
+export function AssessmentRecordDetails({
+  record,
+  videoSrc = getVideoSrc(record.videoUrl),
+  noteValue = "",
+  onNoteChange,
+  onAddNote,
+  showNoteComposer = false,
+}) {
+  const videoMimeType = getVideoMimeType(record.fileName);
+
+  return (
+    <>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+        {record.testType} • {record.createdAt ? new Date(record.createdAt).toLocaleString() : "-"}
+      </Typography>
+
+      <Stack spacing={1}>
+        <Typography variant="body2">File: {record.fileName || "-"}</Typography>
+        <Typography variant="body2">Duration: {record.durationSeconds ?? "-"}s</Typography>
+        <Typography variant="body2">Resolution: {record.resolution || "-"}</Typography>
+        <Typography variant="body2">FPS: {record.fps ?? "-"}</Typography>
+        <Typography variant="body2">Doctor: {record.doctorName || "Not Assigned"}</Typography>
+        {record.alertStatus && <Typography variant="body2">Alert Status: {record.alertStatus}</Typography>}
+        {record.followUpAction && <Typography variant="body2">Follow Up: {record.followUpAction}</Typography>}
+        {record.followUpDueDate && <Typography variant="body2">Follow Up Due: {record.followUpDueDate}</Typography>}
+      </Stack>
+
+      {videoSrc && (
+        <Box sx={{ mt: 2 }}>
+          <Typography variant="subtitle2" sx={{ mb: 1 }}>
+            Uploaded Video
+          </Typography>
+          <Box
+            component="video"
+            controls
+            preload="metadata"
+            playsInline
+            sx={{
+              width: "100%",
+              maxHeight: 360,
+              borderRadius: 2,
+              backgroundColor: "#000",
+            }}
+          >
+            <source src={videoSrc} type={videoMimeType} />
+            Your browser could not play this uploaded video.
+          </Box>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+            Video source: {record.fileName || "uploaded video"}
+          </Typography>
+        </Box>
+      )}
+
+      <Divider sx={{ my: 2 }} />
+      {renderAnalysis(record)}
+
+      {(record.notes || []).length > 0 && (
+        <>
+          <Divider sx={{ my: 2 }} />
+          <Box>
+            <Typography variant="subtitle2" sx={{ mb: 1 }}>
+              Doctor Notes
+            </Typography>
+            <Stack spacing={1}>
+              {record.notes.map((note) => (
+                <Box key={note.id} sx={{ border: "1px solid #ddd", borderRadius: 2, p: 1.5 }}>
+                  <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                    {note.doctorName} {note.doctorGeneratedId ? `(${note.doctorGeneratedId})` : ""}
+                  </Typography>
+                  <Typography variant="body2">{note.text}</Typography>
+                </Box>
+              ))}
+            </Stack>
+          </Box>
+        </>
+      )}
+
+      {showNoteComposer && (
+        <>
+          <Divider sx={{ my: 2 }} />
+          <Box>
+            <Typography variant="subtitle2" sx={{ mb: 1 }}>
+              Add Medical Record Note
+            </Typography>
+            <TextField
+              label="Doctor note"
+              multiline
+              rows={3}
+              fullWidth
+              value={noteValue}
+              onChange={(event) => onNoteChange?.(event.target.value)}
+            />
+            <Button
+              variant="contained"
+              sx={{ mt: 2 }}
+              onClick={() => onAddNote?.()}
+            >
+              Add Note
+            </Button>
+          </Box>
+        </>
+      )}
+    </>
   );
 }

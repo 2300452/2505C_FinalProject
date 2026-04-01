@@ -1,19 +1,22 @@
 import uuid
 import json
+import shutil
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 from ..db import get_db
-from ..models import Appointment, MedicalRecord, RecordNote, User
+from ..models import Appointment, Consultation, MedicalRecord, RecordNote, User
 from ..config import settings
 from ..services.pose_estimation import run_pose_estimation
 from ..services.tug_analysis import analyse_tug
 from ..services.ftsst_analysis import analyse_ftsst
-from ..utils.video import get_video_metadata
+from ..utils.video import create_browser_playable_video, get_video_metadata
 from ..api_schemas import (
     AppointmentCreateRequest,
+    ConsultationSaveRequest,
+    AppointmentStatusUpdateRequest,
     MedicalRecordCreateRequest,
     NoteCreateRequest,
     RecordAlertActionRequest,
@@ -22,6 +25,13 @@ from ..api_schemas import (
 
 router = APIRouter(prefix="/data", tags=["data"])
 ALLOWED_VIDEO_EXTENSIONS = {".mp4", ".mov", ".avi", ".webm", ".mkv"}
+
+
+def calculate_age(dob) -> int | None:
+    if not dob:
+        return None
+    today = date.today()
+    return today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
 
 
 def serialize_user(user: User) -> dict:
@@ -34,6 +44,10 @@ def serialize_user(user: User) -> dict:
         "email": user.email,
         "phone": user.phone or "",
         "dob": user.dob.isoformat() if user.dob else "",
+        "age": calculate_age(user.dob),
+        "gender": user.gender or "",
+        "allergies": user.allergies or "",
+        "existingConditions": user.existing_conditions or "",
         "specialty": user.specialty or "",
         "designation": user.designation or "",
         "reportsToUserId": user.reports_to_user_id,
@@ -79,6 +93,8 @@ def serialize_record(
     record: MedicalRecord,
     users_by_id: dict[int, User],
     notes_by_record_id: dict[int, list[RecordNote]],
+    assessment_numbers: dict[int, int] | None = None,
+    consultations_by_record_id: dict[int, Consultation] | None = None,
 ) -> dict:
     patient = users_by_id.get(record.patient_user_id)
     doctor = users_by_id.get(record.doctor_user_id) if record.doctor_user_id else None
@@ -100,6 +116,7 @@ def serialize_record(
 
     return {
         "id": record.id,
+        "assessmentNumber": (assessment_numbers or {}).get(record.id),
         "patientId": record.patient_user_id,
         "patientGeneratedId": patient.generated_id if patient else "",
         "patientName": patient.name if patient else "Unknown",
@@ -117,6 +134,7 @@ def serialize_record(
         "fps": float(record.fps) if record.fps is not None else None,
         "resolution": record.resolution or "",
         "analysis": analysis,
+        "consultation": serialize_consultation((consultations_by_record_id or {}).get(record.id)),
         "alertStatus": record.alert_status or "",
         "followUpAction": record.follow_up_action or "",
         "followUpDueDate": record.follow_up_due_date.isoformat() if record.follow_up_due_date else None,
@@ -127,6 +145,94 @@ def serialize_record(
             for note in notes
         ],
     }
+
+
+def serialize_consultation(consultation: Consultation | None) -> dict | None:
+    if not consultation:
+        return None
+
+    medications = []
+    if consultation.medications_json:
+        try:
+            medications = json.loads(consultation.medications_json)
+        except json.JSONDecodeError:
+            medications = []
+
+    alert_flags = []
+    if consultation.alert_flags_json:
+        try:
+            alert_flags = json.loads(consultation.alert_flags_json)
+        except json.JSONDecodeError:
+            alert_flags = []
+
+    return {
+        "id": consultation.id,
+        "appointmentId": consultation.appointment_id,
+        "patientId": consultation.patient_user_id,
+        "doctorId": consultation.doctor_user_id,
+        "medicalRecordId": consultation.medical_record_id,
+        "symptoms": consultation.symptoms or "",
+        "duration": consultation.duration or "",
+        "painLevel": consultation.pain_level,
+        "patientComplaints": consultation.patient_complaints or "",
+        "bloodPressure": consultation.blood_pressure or "",
+        "heartRate": consultation.heart_rate or "",
+        "physicalFindings": consultation.physical_findings or "",
+        "diagnosis": consultation.diagnosis or "",
+        "conditionSeverity": consultation.condition_severity or "",
+        "assessmentNotes": consultation.assessment_notes or "",
+        "medications": medications,
+        "followUpDate": consultation.follow_up_date.isoformat() if consultation.follow_up_date else "",
+        "priority": consultation.priority or "Normal",
+        "notesToPatient": consultation.notes_to_patient or "",
+        "alertFlags": alert_flags,
+        "createdAt": consultation.created_at.isoformat() if consultation.created_at else None,
+        "updatedAt": consultation.updated_at.isoformat() if consultation.updated_at else None,
+    }
+
+
+def ensure_consultation_entry_for_completed_appointment(
+    db: Session,
+    appointment: Appointment,
+) -> Consultation:
+    consultation = (
+        db.query(Consultation)
+        .filter(Consultation.appointment_id == appointment.id)
+        .first()
+    )
+    if consultation:
+        return consultation
+
+    consultation_record = MedicalRecord(
+        patient_user_id=appointment.patient_user_id,
+        doctor_user_id=appointment.doctor_user_id,
+        test_type="Consultation",
+        file_name=None,
+        result="Completed",
+    )
+    db.add(consultation_record)
+    db.flush()
+
+    consultation = Consultation(
+        appointment_id=appointment.id,
+        patient_user_id=appointment.patient_user_id,
+        doctor_user_id=appointment.doctor_user_id or 0,
+        medical_record_id=consultation_record.id,
+        priority="Normal",
+        alert_flags_json="[]",
+        medications_json="[]",
+    )
+    db.add(consultation)
+    db.flush()
+    return consultation
+
+
+def is_record_complete(record: MedicalRecord) -> bool:
+    if record.file_name and (not record.video_path or not record.analysis_json or not record.result):
+        return False
+    if record.video_path and not Path(record.video_path).exists():
+        return False
+    return True
 
 
 def decimal_or_none(value: float | None) -> Decimal | None:
@@ -273,6 +379,12 @@ def update_user(user_id: int, payload: UserProfileUpdateRequest, db: Session = D
         user.email = payload.email
     if payload.phone is not None:
         user.phone = payload.phone
+    if payload.gender is not None:
+        user.gender = payload.gender.strip() or None
+    if payload.allergies is not None:
+        user.allergies = payload.allergies.strip() or None
+    if payload.existing_conditions is not None:
+        user.existing_conditions = payload.existing_conditions.strip() or None
 
     if user.role == "Patient":
         if payload.dob is not None:
@@ -392,32 +504,214 @@ def get_doctor_appointments(doctor_id: int, db: Session = Depends(get_db)):
     return [serialize_appointment(appointment, users_by_id) for appointment in appointments]
 
 
+@router.post("/appointments/status")
+def update_appointment_status(payload: AppointmentStatusUpdateRequest, db: Session = Depends(get_db)):
+    appointment = db.query(Appointment).filter(Appointment.id == payload.appointment_id).first()
+    if not appointment:
+        raise HTTPException(status_code=404, detail="Appointment not found.")
+
+    doctor = db.query(User).filter(User.id == payload.doctor_user_id, User.role == "Doctor").first()
+    if not doctor:
+        raise HTTPException(status_code=404, detail="Doctor not found.")
+
+    if appointment.doctor_user_id not in {None, payload.doctor_user_id}:
+        raise HTTPException(status_code=403, detail="This appointment is assigned to another doctor.")
+
+    if payload.status not in {"Completed", "Rescheduled"}:
+        raise HTTPException(status_code=400, detail="Invalid appointment status.")
+
+    appointment.doctor_user_id = payload.doctor_user_id
+    appointment.status = payload.status
+    if payload.status == "Completed":
+        ensure_consultation_entry_for_completed_appointment(db, appointment)
+    db.commit()
+    db.refresh(appointment)
+
+    user_ids = {appointment.patient_user_id, payload.doctor_user_id}
+    users_by_id = {
+        user.id: user for user in db.query(User).filter(User.id.in_(user_ids)).all()
+    }
+    return serialize_appointment(appointment, users_by_id)
+
+
+@router.get("/appointments/{appointment_id}/consultation")
+def get_appointment_consultation(appointment_id: int, db: Session = Depends(get_db)):
+    appointment = db.query(Appointment).filter(Appointment.id == appointment_id).first()
+    if not appointment:
+        raise HTTPException(status_code=404, detail="Appointment not found.")
+
+    patient = db.query(User).filter(User.id == appointment.patient_user_id).first()
+    doctor = (
+        db.query(User).filter(User.id == appointment.doctor_user_id).first()
+        if appointment.doctor_user_id
+        else None
+    )
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found.")
+
+    consultation = (
+        db.query(Consultation)
+        .filter(Consultation.appointment_id == appointment_id)
+        .first()
+    )
+    latest_record = (
+        db.query(MedicalRecord)
+        .filter(
+            MedicalRecord.patient_user_id == appointment.patient_user_id,
+            MedicalRecord.analysis_json.isnot(None),
+            MedicalRecord.video_path.isnot(None),
+        )
+        .order_by(MedicalRecord.created_at.desc(), MedicalRecord.id.desc())
+        .first()
+    )
+    last_consultation = (
+        db.query(Consultation)
+        .filter(Consultation.patient_user_id == appointment.patient_user_id)
+        .order_by(Consultation.created_at.desc(), Consultation.id.desc())
+        .first()
+    )
+
+    alert_flags = []
+    if latest_record and latest_record.result == "Fail":
+        alert_flags.append("Failed mobility test - Recommend earlier review")
+    if latest_record and latest_record.analysis_json:
+        try:
+            analysis = json.loads(latest_record.analysis_json)
+            risk_category = analysis.get("analysis", {}).get("risk_category", "")
+            if risk_category == "high":
+                alert_flags.append("High risk patient")
+        except json.JSONDecodeError:
+            pass
+
+    consultation_payload = serialize_consultation(consultation)
+    if not consultation_payload:
+        consultation_payload = {
+            "priority": "Urgent" if alert_flags else "Normal",
+            "medications": [],
+            "alertFlags": alert_flags,
+        }
+
+    return {
+        "appointment": serialize_appointment(
+            appointment,
+            {user.id: user for user in [patient, doctor] if user}
+        ),
+        "patient": serialize_user(patient),
+        "doctor": serialize_user(doctor) if doctor else None,
+        "lastVisitDate": last_consultation.created_at.isoformat() if last_consultation and last_consultation.id != (consultation.id if consultation else None) else "",
+        "latestRecord": _serialize_records(db, [latest_record])[0] if latest_record else None,
+        "consultation": consultation_payload,
+    }
+
+
+@router.post("/appointments/{appointment_id}/consultation")
+def save_appointment_consultation(
+    appointment_id: int,
+    payload: ConsultationSaveRequest,
+    db: Session = Depends(get_db),
+):
+    appointment = db.query(Appointment).filter(Appointment.id == appointment_id).first()
+    if not appointment:
+        raise HTTPException(status_code=404, detail="Appointment not found.")
+
+    doctor = db.query(User).filter(User.id == payload.doctor_user_id, User.role == "Doctor").first()
+    if not doctor:
+        raise HTTPException(status_code=404, detail="Doctor not found.")
+
+    patient = db.query(User).filter(User.id == appointment.patient_user_id, User.role == "Patient").first()
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found.")
+
+    appointment.doctor_user_id = payload.doctor_user_id
+    consultation = ensure_consultation_entry_for_completed_appointment(db, appointment)
+    consultation_record = (
+        db.query(MedicalRecord)
+        .filter(MedicalRecord.id == consultation.medical_record_id)
+        .first()
+    )
+
+    consultation.doctor_user_id = payload.doctor_user_id
+    consultation.patient_user_id = appointment.patient_user_id
+    consultation.medical_record_id = consultation_record.id
+    consultation.symptoms = payload.symptoms or None
+    consultation.duration = payload.duration or None
+    consultation.pain_level = payload.pain_level
+    consultation.patient_complaints = payload.patient_complaints or None
+    consultation.blood_pressure = payload.blood_pressure or None
+    consultation.heart_rate = payload.heart_rate or None
+    consultation.physical_findings = payload.physical_findings or None
+    consultation.diagnosis = payload.diagnosis or None
+    consultation.condition_severity = payload.condition_severity or None
+    consultation.assessment_notes = payload.assessment_notes or None
+    consultation.medications_json = json.dumps([item.model_dump() for item in payload.medications])
+    consultation.follow_up_date = payload.follow_up_date
+    consultation.priority = payload.priority or "Normal"
+    consultation.notes_to_patient = payload.notes_to_patient or None
+    consultation.alert_flags_json = json.dumps(payload.alert_flags)
+
+    consultation_record.doctor_user_id = payload.doctor_user_id
+    consultation_record.result = "Completed"
+
+    appointment.doctor_user_id = payload.doctor_user_id
+    appointment.status = "Completed"
+
+    db.commit()
+    db.refresh(consultation)
+    db.refresh(appointment)
+
+    return {
+        "message": "Consultation saved successfully.",
+        "consultation": serialize_consultation(consultation),
+        "appointment": serialize_appointment(appointment, {patient.id: patient, doctor.id: doctor}),
+    }
+
+
 @router.get("/records")
 def get_records(db: Session = Depends(get_db)):
-    records = db.query(MedicalRecord).order_by(MedicalRecord.created_at.desc()).all()
+    records = [
+        record
+        for record in db.query(MedicalRecord).order_by(MedicalRecord.created_at.desc()).all()
+        if is_record_complete(record)
+    ]
     return _serialize_records(db, records)
 
 
 @router.get("/records/patient/{patient_id}")
 def get_patient_records(patient_id: int, db: Session = Depends(get_db)):
-    records = (
-        db.query(MedicalRecord)
-        .filter(MedicalRecord.patient_user_id == patient_id)
-        .order_by(MedicalRecord.created_at.desc())
-        .all()
-    )
+    records = [
+        record
+        for record in (
+            db.query(MedicalRecord)
+            .filter(MedicalRecord.patient_user_id == patient_id)
+            .order_by(MedicalRecord.created_at.desc())
+            .all()
+        )
+        if is_record_complete(record)
+    ]
     return _serialize_records(db, records)
 
 
 @router.get("/records/alerts/failed")
 def get_failed_records(db: Session = Depends(get_db)):
-    records = (
-        db.query(MedicalRecord)
-        .filter(MedicalRecord.result == "Fail")
-        .order_by(MedicalRecord.created_at.desc())
-        .all()
-    )
+    records = [
+        record
+        for record in (
+            db.query(MedicalRecord)
+            .filter(MedicalRecord.result == "Fail")
+            .order_by(MedicalRecord.created_at.desc())
+            .all()
+        )
+        if is_record_complete(record)
+    ]
     return _serialize_records(db, records)
+
+
+@router.get("/records/{record_id}")
+def get_record(record_id: int, db: Session = Depends(get_db)):
+    record = db.query(MedicalRecord).filter(MedicalRecord.id == record_id).first()
+    if not record or not is_record_complete(record):
+        raise HTTPException(status_code=404, detail="Medical record not found.")
+    return _serialize_records(db, [record])[0]
 
 
 @router.post("/records")
@@ -448,7 +742,7 @@ def create_record(payload: MedicalRecordCreateRequest, db: Session = Depends(get
     users_by_id = {patient.id: patient}
     if doctor:
         users_by_id[doctor.id] = doctor
-    return serialize_record(record, users_by_id, {})
+    return _serialize_records(db, [record])[0]
 
 
 @router.post("/records/upload")
@@ -494,8 +788,10 @@ async def upload_record_video(
 
     try:
         analysis = analyse_uploaded_video(dest_path, test_type)
-        metadata = get_video_metadata(str(dest_path))
+        playable_path = Path(create_browser_playable_video(str(dest_path), str(upload_dir / "playable.mp4")))
+        metadata = get_video_metadata(str(playable_path))
     except Exception as exc:
+        shutil.rmtree(upload_dir, ignore_errors=True)
         raise HTTPException(status_code=400, detail=f"Video analysis failed: {exc}") from exc
 
     record = MedicalRecord(
@@ -507,7 +803,7 @@ async def upload_record_video(
         stand_time=to_decimal(analysis["stand_time"]),
         walk_time=to_decimal(analysis["walk_time"]),
         sit_time=to_decimal(analysis["sit_time"]),
-        video_path=str(dest_path),
+        video_path=str(playable_path),
         duration_seconds=to_decimal(metadata["duration_seconds"]),
         fps=to_decimal(metadata["fps"]),
         resolution=metadata["resolution"],
@@ -518,10 +814,7 @@ async def upload_record_video(
     db.commit()
     db.refresh(record)
 
-    users_by_id = {patient.id: patient}
-    if doctor:
-        users_by_id[doctor.id] = doctor
-    return serialize_record(record, users_by_id, {})
+    return _serialize_records(db, [record])[0]
 
 
 @router.post("/records/{record_id}/alert-action")
@@ -610,7 +903,37 @@ def _serialize_records(db: Session, records: list[MedicalRecord]) -> list[dict]:
     for note in notes:
         notes_by_record_id.setdefault(note.medical_record_id, []).append(note)
 
+    consultations = (
+        db.query(Consultation)
+        .filter(Consultation.medical_record_id.in_(record_ids))
+        .all()
+    ) if record_ids else []
+    consultations_by_record_id = {
+        consultation.medical_record_id: consultation
+        for consultation in consultations
+        if consultation.medical_record_id is not None
+    }
+
+    patient_ids = {record.patient_user_id for record in records}
+    all_patient_records = (
+        db.query(MedicalRecord)
+        .filter(MedicalRecord.patient_user_id.in_(patient_ids))
+        .order_by(MedicalRecord.patient_user_id.asc(), MedicalRecord.created_at.asc(), MedicalRecord.id.asc())
+        .all()
+    )
+    assessment_numbers: dict[int, int] = {}
+    patient_counts: dict[int, int] = {}
+    for patient_record in all_patient_records:
+        patient_counts[patient_record.patient_user_id] = patient_counts.get(patient_record.patient_user_id, 0) + 1
+        assessment_numbers[patient_record.id] = patient_counts[patient_record.patient_user_id]
+
     return [
-        serialize_record(record, users_by_id, notes_by_record_id)
+        serialize_record(
+            record,
+            users_by_id,
+            notes_by_record_id,
+            assessment_numbers,
+            consultations_by_record_id,
+        )
         for record in records
     ]

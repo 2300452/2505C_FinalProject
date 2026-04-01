@@ -16,7 +16,7 @@ import {
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";
 import {
-  getAppointmentsForDoctor,
+  getAppointments,
   getFailedAlerts,
   getPatients,
   getRecords,
@@ -33,7 +33,7 @@ function DoctorDashboard() {
   useEffect(() => {
     if (!user) return;
     Promise.all([
-      getAppointmentsForDoctor(user.id),
+      getAppointments(),
       getFailedAlerts(),
       getPatients(),
       getRecords(),
@@ -139,11 +139,11 @@ function DoctorDashboard() {
           <Card sx={{ height: "100%", boxShadow: "none", border: "1px solid #dbe4e8" }}>
             <CardContent>
               <Typography variant="h6" gutterBottom>
-                Schedule Queue
+                Appointment Notifications
               </Typography>
 
               {appointments.length === 0 ? (
-                <Alert severity="info">No upcoming appointments.</Alert>
+                <Alert severity="info">No patient appointments booked yet.</Alert>
               ) : (
                 <Stack spacing={2}>
                   {appointments.slice(0, 8).map((appt, index) => (
@@ -155,13 +155,16 @@ function DoctorDashboard() {
                       }}
                     >
                       <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                        {appt.patientName}
+                        Patient ID: {appt.patientGeneratedId}
                       </Typography>
                       <Typography variant="caption" display="block" color="text.secondary">
                         {appt.patientGeneratedId}
                       </Typography>
                       <Typography variant="caption" display="block">
                         {appt.date} at {appt.time}
+                      </Typography>
+                      <Typography variant="caption" display="block" color="text.secondary">
+                        Status: {appt.status}
                       </Typography>
                     </Box>
                   ))}
@@ -175,7 +178,7 @@ function DoctorDashboard() {
           <Card sx={{ height: "100%", boxShadow: "none", border: "1px solid #dbe4e8" }}>
             <CardContent>
               <Typography variant="h6" gutterBottom>
-                Upcoming Appointments
+                Shared Clinic Appointments
               </Typography>
 
               {appointments.length === 0 ? (
@@ -193,7 +196,7 @@ function DoctorDashboard() {
                       }}
                     >
                       <Typography sx={{ fontWeight: 700 }}>
-                        {item.patientName} ({item.patientGeneratedId})
+                        Patient ID: {item.patientGeneratedId}
                       </Typography>
                       <Typography variant="body2" color="text.secondary">
                         {item.date} at {item.time}

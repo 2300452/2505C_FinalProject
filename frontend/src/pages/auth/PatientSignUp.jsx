@@ -6,11 +6,14 @@ import {
   Card,
   CardContent,
   Container,
+  MenuItem,
   TextField,
   Typography,
 } from "@mui/material";
 import { Link, useNavigate } from "react-router-dom";
 import { createPatient } from "../../services/demoStore";
+
+const GENDER_OPTIONS = ["Male", "Female", "Prefer not to say"];
 
 function PatientSignUp() {
   const navigate = useNavigate();
@@ -19,6 +22,7 @@ function PatientSignUp() {
     email: "",
     password: "",
     dob: "",
+    gender: "",
     phone: "",
   });
   const [message, setMessage] = useState("");
@@ -62,6 +66,13 @@ function PatientSignUp() {
               <TextField label="Email" name="email" fullWidth margin="normal" value={form.email} onChange={handleChange} />
               <TextField label="Password" name="password" type="password" fullWidth margin="normal" value={form.password} onChange={handleChange} />
               <TextField label="Date of Birth" name="dob" type="date" fullWidth margin="normal" InputLabelProps={{ shrink: true }} value={form.dob} onChange={handleChange} />
+              <TextField select label="Gender" name="gender" fullWidth margin="normal" value={form.gender} onChange={handleChange}>
+                {GENDER_OPTIONS.map((option) => (
+                  <MenuItem key={option} value={option}>
+                    {option}
+                  </MenuItem>
+                ))}
+              </TextField>
               <TextField label="Phone" name="phone" fullWidth margin="normal" value={form.phone} onChange={handleChange} />
 
               <Button type="submit" variant="contained" fullWidth sx={{ mt: 2 }}>

@@ -7,12 +7,20 @@ import {
 } from "@mui/material";
 import { useAuth } from "../../contexts/AuthContext";
 import { getRecordsForPatient } from "../../services/demoStore";
-import AssessmentRecordCard from "../../components/common/AssessmentRecordCard";
+import AssessmentRecordListItem from "../../components/common/AssessmentRecordListItem";
+
+function formatTimestamp(value) {
+  if (!value) return "-";
+  return new Date(value).toLocaleString();
+}
 
 function PatientRecordsPage() {
   const { user } = useAuth();
   const [records, setRecords] = useState([]);
   const [message, setMessage] = useState("");
+  const orderedRecords = [...records].sort(
+    (left, right) => new Date(right.createdAt || 0).getTime() - new Date(left.createdAt || 0).getTime()
+  );
 
   useEffect(() => {
     if (!user) return;
@@ -33,12 +41,20 @@ function PatientRecordsPage() {
 
       {message && <Alert severity="info" sx={{ mb: 2 }}>{message}</Alert>}
 
-      {records.length === 0 ? (
+      {orderedRecords.length === 0 ? (
         <Typography>No medical records found yet.</Typography>
       ) : (
         <Stack spacing={2}>
-          {records.map((record, index) => (
-            <AssessmentRecordCard key={record.id} record={record} index={index + 1} />
+          {orderedRecords.map((record, index) => (
+            <AssessmentRecordListItem
+              key={record.id}
+              title={`${record.testType === "Consultation" ? "Consultation" : "Assessment"} ${record.assessmentNumber ?? index + 1}`}
+              subtitle={record.testType}
+              metadata={formatTimestamp(record.createdAt)}
+              result={record.result}
+              to={`/patient/records/${record.id}`}
+              state={{ record }}
+            />
           ))}
         </Stack>
       )}

@@ -2,81 +2,173 @@ import { useEffect, useState } from "react";
 import {
   Alert,
   Box,
+  Button,
+  Card,
+  CardContent,
   Grid,
   Stack,
+  TextField,
   Typography,
 } from "@mui/material";
+import { useNavigate } from "react-router-dom";
 import AppointmentCalendar from "../../components/schedule/AppointmentCalendar";
-import { getAppointments } from "../../services/demoStore";
+import {
+  doctorRescheduleAppointment,
+  getAppointments,
+} from "../../services/demoStore";
+import { useAuth } from "../../contexts/AuthContext";
 
 function DoctorAppointments() {
+  const navigate = useNavigate();
+  const { user } = useAuth();
   const [appointments, setAppointments] = useState([]);
   const [selectedDate, setSelectedDate] = useState("");
+  const [message, setMessage] = useState("");
+  const [rescheduleDraft, setRescheduleDraft] = useState({});
+
+  const loadAppointments = async () => {
+    if (!user) return;
+    const appointmentData = await getAppointments();
+    setAppointments(appointmentData);
+  };
 
   useEffect(() => {
-    getAppointments().then(setAppointments).catch(() => setAppointments([]));
-  }, []);
+    loadAppointments().catch(() => setAppointments([]));
+  }, [user]);
+
+  const handleReschedule = async (appointmentId) => {
+    const draft = rescheduleDraft[appointmentId];
+    if (!draft?.date || !draft?.time) {
+      setMessage("Please choose a new date and time before rescheduling.");
+      return;
+    }
+
+    try {
+      await doctorRescheduleAppointment(appointmentId, user.id, draft.date, draft.time);
+      setMessage("Appointment rescheduled successfully.");
+      setRescheduleDraft((current) => ({ ...current, [appointmentId]: { date: "", time: "" } }));
+      await loadAppointments();
+    } catch (error) {
+      setMessage(error.message);
+    }
+  };
 
   return (
     <Box>
       <Typography variant="h4" gutterBottom>
-        Clinic Schedule
+        Doctor Appointments
       </Typography>
       <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
-        Dark slots are already booked. Doctors and patients all see the same availability.
+        All doctors share the same clinic appointment pool, so booked patient times appear here for everyone.
       </Typography>
+      {message && <Alert severity="info" sx={{ mb: 2 }}>{message}</Alert>}
 
       <Grid container spacing={2}>
-        <Grid item xs={12} lg={4}>
-          <Box
-            sx={{
-              p: 3,
-              borderRadius: 4,
-              border: (theme) => `1px solid ${theme.palette.custom.border}`,
-              bgcolor: "background.paper",
-              height: "100%",
-            }}
-          >
-            <Typography variant="h6" gutterBottom>
-              Confirmed Appointments
-            </Typography>
-
+        <Grid item xs={12} lg={5}>
+          <Stack spacing={2}>
             {appointments.length === 0 ? (
-              <Alert severity="info">No appointments found.</Alert>
+              <Alert severity="info">No patient appointments booked yet.</Alert>
             ) : (
-              <Stack spacing={2}>
-                {appointments.map((appt, index) => (
-                  <Box
-                    key={appt.id}
-                    sx={{
-                      pl: 2,
-                      borderLeft: `4px solid ${index % 2 === 0 ? "#7eb8d9" : "#60d3c4"}`,
-                    }}
-                  >
-                    <Typography variant="body1" sx={{ fontWeight: 700 }}>
-                      {appt.patientName}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      {appt.patientGeneratedId}
-                    </Typography>
-                    <Typography variant="body2">
-                      {appt.date} at {appt.time}
-                    </Typography>
-                  </Box>
-                ))}
-              </Stack>
+              appointments.map((appt) => {
+                const isCompleted = appt.status === "Completed";
+                return (
+                  <Card key={appt.id} sx={{ border: "1px solid #ddd", boxShadow: "none" }}>
+                    <CardContent>
+                      <Stack spacing={1.5}>
+                        <Box>
+                          <Typography variant="h6">Patient ID: {appt.patientGeneratedId}</Typography>
+                          <Typography variant="body2" color="text.secondary">
+                            Consultation-ready shared appointment
+                          </Typography>
+                        </Box>
+
+                        <Typography variant="body2">
+                          {appt.date} at {appt.time}
+                        </Typography>
+                        <Typography variant="body2">Status: {appt.status}</Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          {appt.doctorName && appt.doctorName !== "Unassigned"
+                            ? `Handled by: ${appt.doctorName}`
+                            : "Shared clinic appointment"}
+                        </Typography>
+
+                        {!isCompleted && (
+                          <>
+                            <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
+                              <Button
+                                variant="contained"
+                                onClick={() => navigate(`/doctor/appointments/${appt.id}/consultation`)}
+                              >
+                                Appointment Completed
+                              </Button>
+                              <Button
+                                variant="outlined"
+                                onClick={() =>
+                                  setRescheduleDraft((current) => ({
+                                    ...current,
+                                    [appt.id]: current[appt.id] ?? { date: appt.date, time: appt.time },
+                                  }))
+                                }
+                              >
+                                Appointment Reschedule
+                              </Button>
+                            </Stack>
+
+                            {rescheduleDraft[appt.id] && (
+                              <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
+                                <TextField
+                                  type="date"
+                                  label="New Date"
+                                  InputLabelProps={{ shrink: true }}
+                                  value={rescheduleDraft[appt.id]?.date || ""}
+                                  onChange={(event) =>
+                                    setRescheduleDraft((current) => ({
+                                      ...current,
+                                      [appt.id]: {
+                                        ...current[appt.id],
+                                        date: event.target.value,
+                                      },
+                                    }))
+                                  }
+                                />
+                                <TextField
+                                  type="time"
+                                  label="New Time"
+                                  InputLabelProps={{ shrink: true }}
+                                  value={rescheduleDraft[appt.id]?.time || ""}
+                                  onChange={(event) =>
+                                    setRescheduleDraft((current) => ({
+                                      ...current,
+                                      [appt.id]: {
+                                        ...current[appt.id],
+                                        time: event.target.value,
+                                      },
+                                    }))
+                                  }
+                                />
+                                <Button variant="contained" onClick={() => handleReschedule(appt.id)}>
+                                  Save
+                                </Button>
+                              </Stack>
+                            )}
+                          </>
+                        )}
+                      </Stack>
+                    </CardContent>
+                  </Card>
+                );
+              })
             )}
-          </Box>
+          </Stack>
         </Grid>
 
-        <Grid item xs={12} lg={8}>
+        <Grid item xs={12} lg={7}>
           <AppointmentCalendar
             appointments={appointments}
             selectedDate={selectedDate}
             onDateSelect={setSelectedDate}
             readOnly
-            title="Shared Availability"
-            highlightFullyBookedDates={false}
+            title="Shared Clinic Schedule"
           />
         </Grid>
       </Grid>

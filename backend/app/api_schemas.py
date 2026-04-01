@@ -13,7 +13,10 @@ class PatientSignupRequest(BaseModel):
     email: EmailStr
     password: str
     dob: date | None = None
+    gender: str | None = None
     phone: str | None = None
+    allergies: str | None = None
+    existing_conditions: str | None = None
 
 
 class DoctorCreateRequest(BaseModel):
@@ -47,6 +50,9 @@ class UserProfileUpdateRequest(BaseModel):
     email: EmailStr | None = None
     phone: str | None = None
     dob: date | None = None
+    gender: str | None = None
+    allergies: str | None = None
+    existing_conditions: str | None = None
     specialty: str | None = None
     designation: str | None = None
     reports_to_user_id: int | None = None
@@ -63,6 +69,40 @@ class AppointmentRescheduleRequest(BaseModel):
     appointment_id: int
     appointment_date: date
     appointment_time: time
+
+
+class AppointmentStatusUpdateRequest(BaseModel):
+    appointment_id: int
+    doctor_user_id: int
+    status: str
+
+
+class ConsultationMedicationItem(BaseModel):
+    medication_name: str
+    dosage: str | None = None
+    frequency: str | None = None
+    duration: str | None = None
+    instructions: str | None = None
+
+
+class ConsultationSaveRequest(BaseModel):
+    doctor_user_id: int
+    medical_record_id: int | None = None
+    symptoms: str | None = None
+    duration: str | None = None
+    pain_level: int | None = None
+    patient_complaints: str | None = None
+    blood_pressure: str | None = None
+    heart_rate: str | None = None
+    physical_findings: str | None = None
+    diagnosis: str | None = None
+    condition_severity: str | None = None
+    assessment_notes: str | None = None
+    medications: list[ConsultationMedicationItem] = []
+    follow_up_date: date | None = None
+    priority: str | None = None
+    notes_to_patient: str | None = None
+    alert_flags: list[str] = []
 
 
 class NoteCreateRequest(BaseModel):

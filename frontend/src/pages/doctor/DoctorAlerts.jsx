@@ -1,21 +1,19 @@
 import { useEffect, useState } from "react";
-import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import {
-  Accordion,
-  AccordionDetails,
-  AccordionSummary,
   Alert,
   Box,
-  Button,
   Stack,
-  Chip,
   Typography,
 } from "@mui/material";
-import { getFailedAlerts, updateFailedAlertAction } from "../../services/demoStore";
-import { useAuth } from "../../contexts/AuthContext";
+import { getFailedAlerts } from "../../services/demoStore";
+import AssessmentRecordListItem from "../../components/common/AssessmentRecordListItem";
+
+function formatTimestamp(value) {
+  if (!value) return "-";
+  return new Date(value).toLocaleString();
+}
 
 function DoctorAlerts() {
-  const { user } = useAuth();
   const [alerts, setAlerts] = useState([]);
   const [message, setMessage] = useState("");
 
@@ -26,16 +24,6 @@ function DoctorAlerts() {
   useEffect(() => {
     loadAlerts();
   }, []);
-
-  const handleAction = async (recordId, action) => {
-    try {
-      await updateFailedAlertAction(recordId, user.id, action);
-      setMessage("Alert updated successfully.");
-      loadAlerts();
-    } catch (error) {
-      setMessage(error.message);
-    }
-  };
 
   return (
     <Box>
@@ -51,45 +39,16 @@ function DoctorAlerts() {
         <Alert severity="success">No failed cases at the moment.</Alert>
       ) : (
         <Stack spacing={2}>
-          {alerts.map((alert) => (
-            <Accordion key={alert.id} sx={{ border: "1px solid #ddd", boxShadow: "none", "&:before": { display: "none" } }}>
-              <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ width: "100%", pr: 1 }}>
-                  <Typography variant="h6">Patient ID: {alert.patientGeneratedId}</Typography>
-                  <Chip label={alert.result || "Pending"} size="small" color={alert.result === "Fail" ? "error" : "default"} />
-                </Stack>
-              </AccordionSummary>
-              <AccordionDetails>
-                <Typography>Test Type: {alert.testType}</Typography>
-                <Typography>Video File: {alert.fileName}</Typography>
-                <Typography>Recorded At: {new Date(alert.createdAt).toLocaleString()}</Typography>
-                <Stack direction="row" spacing={1} sx={{ mt: 1, mb: 1 }} flexWrap="wrap">
-                  <Chip label={alert.alertStatus || "Pending Review"} size="small" />
-                  {alert.followUpAction && <Chip label={alert.followUpAction} size="small" variant="outlined" />}
-                  {alert.followUpDueDate && <Chip label={`Due ${alert.followUpDueDate}`} size="small" variant="outlined" />}
-                </Stack>
-                <Stack direction={{ xs: "column", sm: "row" }} spacing={1} sx={{ mt: 2 }}>
-                  <Button
-                    variant="outlined"
-                    onClick={() => handleAction(alert.id, "request_retake")}
-                  >
-                    Ask For Another Video
-                  </Button>
-                  <Button
-                    variant="contained"
-                    onClick={() => handleAction(alert.id, "schedule_within_week")}
-                  >
-                    Schedule Within A Week
-                  </Button>
-                  <Button
-                    variant="text"
-                    onClick={() => handleAction(alert.id, "monitor")}
-                  >
-                    Monitor
-                  </Button>
-                </Stack>
-              </AccordionDetails>
-            </Accordion>
+          {alerts.map((alert, index) => (
+            <AssessmentRecordListItem
+              key={alert.id}
+              title={`Patient ID: ${alert.patientGeneratedId}`}
+              subtitle={`Assessment ${alert.assessmentNumber ?? index + 1}`}
+              metadata={formatTimestamp(alert.createdAt)}
+              result={alert.result}
+              to={`/doctor/alerts/${alert.id}`}
+              state={{ record: alert }}
+            />
           ))}
         </Stack>
       )}

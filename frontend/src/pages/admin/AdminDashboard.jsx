@@ -219,7 +219,7 @@ function AdminDashboard() {
                   key={appt.id}
                   sx={{ border: "1px solid #ddd", borderRadius: 2, p: 2 }}
                 >
-                  <Typography><strong>Patient:</strong> {appt.patientName} ({appt.patientGeneratedId})</Typography>
+                  <Typography><strong>Patient ID:</strong> {appt.patientGeneratedId}</Typography>
                   <Typography><strong>Doctor:</strong> {appt.doctorName} ({appt.doctorGeneratedId || "Unassigned"})</Typography>
                   <Typography><strong>Current Slot:</strong> {appt.date} {appt.time}</Typography>
                   <Typography><strong>Status:</strong> {appt.status}</Typography>

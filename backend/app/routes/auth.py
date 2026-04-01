@@ -1,5 +1,6 @@
 from sqlalchemy.orm import Session
 from fastapi import APIRouter, Depends, HTTPException
+from datetime import date
 from ..db import get_db
 from ..models import User
 from ..api_schemas import (
@@ -37,6 +38,10 @@ def serialize_user(user: User) -> dict:
         "email": user.email,
         "phone": user.phone or "",
         "dob": user.dob.isoformat() if user.dob else "",
+        "age": calculate_age(user.dob),
+        "gender": user.gender or "",
+        "allergies": user.allergies or "",
+        "existingConditions": user.existing_conditions or "",
         "specialty": user.specialty or "",
         "designation": user.designation or "",
         "reportsToUserId": user.reports_to_user_id,
@@ -46,7 +51,14 @@ def serialize_user(user: User) -> dict:
         "isRootAdmin": user.is_root_admin,
         "isDeleted": user.is_deleted,
         "createdAt": user.created_at.isoformat() if user.created_at else None,
-    }
+}
+
+
+def calculate_age(dob) -> int | None:
+    if not dob:
+        return None
+    today = date.today()
+    return today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
 
 
 def get_report_to_user(user: User) -> User | None:
@@ -97,7 +109,10 @@ def signup(payload: PatientSignupRequest, db: Session = Depends(get_db)):
         email=payload.email,
         password_hash=hash_password(payload.password),
         dob=payload.dob,
+        gender=(payload.gender or "").strip() or None,
         phone=payload.phone,
+        allergies=(payload.allergies or "").strip() or None,
+        existing_conditions=(payload.existing_conditions or "").strip() or None,
         must_change_password=False,
     )
     db.add(patient)

@@ -22,11 +22,14 @@ import DoctorPatients from "./pages/doctor/DoctorPatients";
 import DoctorPatientRecord from "./pages/doctor/DoctorPatientRecord";
 import DoctorAppointments from "./pages/doctor/DoctorAppointments";
 import DoctorAlerts from "./pages/doctor/DoctorAlerts";
+import DoctorAlertDetailPage from "./pages/doctor/DoctorAlertDetailPage";
+import DoctorConsultationPage from "./pages/doctor/DoctorConsultationPage";
 
 import PatientAppointmentsPage from "./pages/patient/PatientAppointmentsPage";
 import PatientBookAppointmentPage from "./pages/patient/PatientBookAppointmentPage";
 import PatientDashboard from "./pages/patient/PatientDashboard";
 import PatientRecordsPage from "./pages/patient/PatientRecordsPage";
+import PatientRecordDetailPage from "./pages/patient/PatientRecordDetailPage";
 import UploadPage from "./pages/patient/UploadPage";
 import UserProfilePage from "./pages/common/UserProfilePage";
 
@@ -148,12 +151,38 @@ function App() {
           />
 
           <Route
+            path="/doctor/appointments/:appointmentId/consultation"
+            element={
+              <ProtectedRoute>
+                <RoleRoute allowedRoles={["Doctor"]}>
+                  <Layout>
+                    <DoctorConsultationPage />
+                  </Layout>
+                </RoleRoute>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
             path="/doctor/alerts"
             element={
               <ProtectedRoute>
                 <RoleRoute allowedRoles={["Doctor"]}>
                   <Layout>
                     <DoctorAlerts />
+                  </Layout>
+                </RoleRoute>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/doctor/alerts/:recordId"
+            element={
+              <ProtectedRoute>
+                <RoleRoute allowedRoles={["Doctor"]}>
+                  <Layout>
+                    <DoctorAlertDetailPage />
                   </Layout>
                 </RoleRoute>
               </ProtectedRoute>
@@ -232,6 +261,19 @@ function App() {
                 <RoleRoute allowedRoles={["Patient"]}>
                   <Layout>
                     <PatientRecordsPage />
+                  </Layout>
+                </RoleRoute>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/patient/records/:recordId"
+            element={
+              <ProtectedRoute>
+                <RoleRoute allowedRoles={["Patient"]}>
+                  <Layout>
+                    <PatientRecordDetailPage />
                   </Layout>
                 </RoleRoute>
               </ProtectedRoute>
