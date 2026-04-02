@@ -3,28 +3,21 @@ import FavoriteBorderOutlinedIcon from "@mui/icons-material/FavoriteBorderOutlin
 import PersonOutlineOutlinedIcon from "@mui/icons-material/PersonOutlineOutlined";
 import UploadFileOutlinedIcon from "@mui/icons-material/UploadFileOutlined";
 import DescriptionOutlinedIcon from "@mui/icons-material/DescriptionOutlined";
+import ReportProblemOutlinedIcon from "@mui/icons-material/ReportProblemOutlined";
 import { Box, Card, CardActionArea, CardContent, Grid, Typography } from "@mui/material";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";
-import AppointmentCalendar from "../../components/schedule/AppointmentCalendar";
-import { getAppointments, getAppointmentsForPatient } from "../../services/demoStore";
+import { getAppointmentsForPatient, getRecordsForPatient } from "../../services/demoStore";
 import { useEffect, useState } from "react";
 
 function PatientDashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [allAppointments, setAllAppointments] = useState([]);
   const [myAppointments, setMyAppointments] = useState([]);
-  const [selectedDate, setSelectedDate] = useState("");
+  const [myRecords, setMyRecords] = useState([]);
+  const sideCardColor = "#39d2f4";
 
   const actions = [
-    {
-      title: "Profile",
-      subtitle: "Update your personal details",
-      icon: <PersonOutlineOutlinedIcon sx={{ fontSize: 46, color: "#ffffff" }} />,
-      color: "#39d2f4",
-      onClick: () => navigate("/patient/profile"),
-    },
     {
       title: "Upload Assessment",
       subtitle: "Submit your latest mobility test",
@@ -57,18 +50,21 @@ function PatientDashboard() {
 
   useEffect(() => {
     if (!user) return;
-    Promise.all([getAppointments(), getAppointmentsForPatient(user.id)])
-      .then(([allData, myData]) => {
-        setAllAppointments(allData);
-        setMyAppointments(myData);
+    Promise.all([getAppointmentsForPatient(user.id), getRecordsForPatient(user.id)])
+      .then(([appointmentData, recordData]) => {
+        setMyAppointments(appointmentData);
+        setMyRecords(recordData);
       })
       .catch(() => {
-        setAllAppointments([]);
         setMyAppointments([]);
+        setMyRecords([]);
       });
   }, [user]);
 
   const nextAppointment = myAppointments[0];
+  const latestAlertRecord = [...myRecords]
+    .sort((left, right) => new Date(right.createdAt || 0).getTime() - new Date(left.createdAt || 0).getTime())
+    .find((record) => record.followUpAction || record.alertStatus);
 
   return (
     <Box>
@@ -145,13 +141,25 @@ function PatientDashboard() {
         </Grid>
 
         <Grid item xs={12} xl={4}>
-          <Box sx={{ display: "grid", gap: 3 }}>
+          <Box
+            sx={{
+              display: "grid",
+              gap: 3,
+              gridTemplateColumns: {
+                xs: "1fr",
+                md: "repeat(2, minmax(0, 1fr))",
+                xl: "1fr 1fr",
+              },
+              alignItems: "stretch",
+            }}
+          >
             <Box
               sx={{
                 p: 3,
                 borderRadius: 4,
-                border: (theme) => `1px solid ${theme.palette.custom.border}`,
-                bgcolor: "background.paper",
+                minHeight: 180,
+                bgcolor: sideCardColor,
+                color: "#ffffff",
               }}
             >
               <Typography variant="h5" sx={{ fontWeight: 700, mb: 2 }}>
@@ -163,25 +171,90 @@ function PatientDashboard() {
                   <Typography variant="h6" sx={{ mb: 1 }}>
                     {nextAppointment.time}
                   </Typography>
-                  <Typography variant="body1" color="text.secondary">
+                  <Typography variant="body1" sx={{ color: "rgba(255,255,255,0.95)" }}>
                     Status: {nextAppointment.status}
                   </Typography>
                 </>
               ) : (
-                <Typography variant="body1" color="text.secondary">
+                <Typography variant="body1" sx={{ color: "rgba(255,255,255,0.95)" }}>
                   No appointment booked yet.
                 </Typography>
               )}
             </Box>
 
-            <AppointmentCalendar
-              appointments={allAppointments}
-              selectedDate={selectedDate}
-              onDateSelect={setSelectedDate}
-              readOnly
-              patientFriendly
-              title="Clinic Calendar"
-            />
+            <Card sx={{ borderRadius: 4, boxShadow: "none", minHeight: 180 }}>
+              <CardActionArea
+                onClick={() => navigate(latestAlertRecord ? `/patient/records/${latestAlertRecord.id}` : "/patient/records")}
+                sx={{
+                  height: "100%",
+                  p: 3,
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "flex-start",
+                  justifyContent: "space-between",
+                  bgcolor: sideCardColor,
+                }}
+              >
+                <Box
+                  sx={{
+                    width: 72,
+                    height: 72,
+                    borderRadius: "50%",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    bgcolor: "rgba(255,255,255,0.18)",
+                  }}
+                >
+                  <ReportProblemOutlinedIcon sx={{ fontSize: 38, color: "#ffffff" }} />
+                </Box>
+                <Box>
+                  <Typography variant="h5" sx={{ color: "#ffffff", fontWeight: 800, mb: 1 }}>
+                    Assessment Alert
+                  </Typography>
+                  <Typography variant="body1" sx={{ color: "rgba(255,255,255,0.95)" }}>
+                    {latestAlertRecord?.followUpAction || latestAlertRecord?.alertStatus || "No active assessment alerts"}
+                  </Typography>
+                </Box>
+              </CardActionArea>
+            </Card>
+
+            <Card sx={{ borderRadius: 4, boxShadow: "none", minHeight: 180 }}>
+              <CardActionArea
+                onClick={() => navigate("/patient/profile")}
+                sx={{
+                  height: "100%",
+                  p: 3,
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "flex-start",
+                  justifyContent: "space-between",
+                  bgcolor: sideCardColor,
+                }}
+              >
+                <Box
+                  sx={{
+                    width: 72,
+                    height: 72,
+                    borderRadius: "50%",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    bgcolor: "rgba(255,255,255,0.18)",
+                  }}
+                >
+                  <PersonOutlineOutlinedIcon sx={{ fontSize: 38, color: "#ffffff" }} />
+                </Box>
+                <Box>
+                  <Typography variant="h5" sx={{ color: "#ffffff", fontWeight: 800, mb: 1 }}>
+                    Profile
+                  </Typography>
+                  <Typography variant="body1" sx={{ color: "rgba(255,255,255,0.95)" }}>
+                    Update your personal details
+                  </Typography>
+                </Box>
+              </CardActionArea>
+            </Card>
           </Box>
         </Grid>
       </Grid>
