@@ -61,7 +61,7 @@ function PatientDashboard() {
       });
   }, [user]);
 
-  const nextAppointment = myAppointments[0];
+  const nextAppointment = myAppointments.find((appointment) => appointment.status !== "Completed");
   const latestAlertRecord = [...myRecords]
     .sort((left, right) => new Date(right.createdAt || 0).getTime() - new Date(left.createdAt || 0).getTime())
     .find((record) => record.followUpAction || record.alertStatus);
@@ -70,7 +70,7 @@ function PatientDashboard() {
     <Box>
       <Box sx={{ mb: 4 }}>
         <Typography variant="h4" sx={{ fontWeight: 700, mb: 1 }}>
-          Hello, {user?.name || "Patient"}
+          Hello, Patient ID {user?.generatedId || "-"}
         </Typography>
         <Typography variant="body1" color="text.secondary">
           Choose what you want to do next.

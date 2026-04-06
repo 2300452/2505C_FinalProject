@@ -93,6 +93,20 @@ def initialize_database() -> None:
                 )
 
         if "consultations" in inspector.get_table_names() and "appointments" in inspector.get_table_names():
+            consultation_columns = {column["name"] for column in inspector.get_columns("consultations")}
+            consultation_required_columns = {
+                "tosp_codes_json": "ALTER TABLE consultations ADD COLUMN tosp_codes_json TEXT",
+                "bill_provider_email": "ALTER TABLE consultations ADD COLUMN bill_provider_email VARCHAR(150)",
+                "bill_status": "ALTER TABLE consultations ADD COLUMN bill_status VARCHAR(50)",
+                "bill_sent_at": "ALTER TABLE consultations ADD COLUMN bill_sent_at DATETIME",
+                "patient_bill_status": "ALTER TABLE consultations ADD COLUMN patient_bill_status VARCHAR(50)",
+                "patient_bill_alert_sent_at": "ALTER TABLE consultations ADD COLUMN patient_bill_alert_sent_at DATETIME",
+                "patient_bill_paid_at": "ALTER TABLE consultations ADD COLUMN patient_bill_paid_at DATETIME",
+            }
+            for column_name, statement in consultation_required_columns.items():
+                if column_name not in consultation_columns:
+                    connection.execute(text(statement))
+
             completed_without_consultation = connection.execute(
                 text(
                     """

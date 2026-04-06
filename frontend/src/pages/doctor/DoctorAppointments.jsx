@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Alert,
   Box,
@@ -7,6 +7,8 @@ import {
   CardContent,
   Grid,
   Stack,
+  Tab,
+  Tabs,
   TextField,
   Typography,
 } from "@mui/material";
@@ -25,6 +27,15 @@ function DoctorAppointments() {
   const [selectedDate, setSelectedDate] = useState("");
   const [message, setMessage] = useState("");
   const [rescheduleDraft, setRescheduleDraft] = useState({});
+  const [tab, setTab] = useState("outstanding");
+  const activeAppointments = useMemo(
+    () => appointments.filter((appointment) => appointment.status !== "Completed"),
+    [appointments]
+  );
+  const completedAppointments = useMemo(
+    () => appointments.filter((appointment) => appointment.status === "Completed"),
+    [appointments]
+  );
 
   const loadAppointments = async () => {
     if (!user) return;
@@ -63,108 +74,108 @@ function DoctorAppointments() {
       </Typography>
       {message && <Alert severity="info" sx={{ mb: 2 }}>{message}</Alert>}
 
+      <Tabs value={tab} onChange={(_, value) => setTab(value)} sx={{ mb: 2 }}>
+        <Tab value="outstanding" label={`Outstanding (${activeAppointments.length})`} />
+        <Tab value="completed" label={`Completed (${completedAppointments.length})`} />
+      </Tabs>
+
+      {tab === "outstanding" && (
       <Grid container spacing={2}>
         <Grid item xs={12} lg={5}>
           <Stack spacing={2}>
-            {appointments.length === 0 ? (
+            {activeAppointments.length === 0 ? (
               <Alert severity="info">No patient appointments booked yet.</Alert>
             ) : (
-              appointments.map((appt) => {
-                const isCompleted = appt.status === "Completed";
-                return (
-                  <Card key={appt.id} sx={{ border: "1px solid #ddd", boxShadow: "none" }}>
-                    <CardContent>
-                      <Stack spacing={1.5}>
-                        <Box>
-                          <Typography variant="h6">Patient ID: {appt.patientGeneratedId}</Typography>
-                          <Typography variant="body2" color="text.secondary">
-                            Consultation-ready shared appointment
-                          </Typography>
-                        </Box>
-
-                        <Typography variant="body2">
-                          {appt.date} at {appt.time}
-                        </Typography>
-                        <Typography variant="body2">Status: {appt.status}</Typography>
+              activeAppointments.map((appt) => (
+                <Card key={appt.id} sx={{ border: "1px solid #ddd", boxShadow: "none" }}>
+                  <CardContent>
+                    <Stack spacing={1.5}>
+                      <Box>
+                        <Typography variant="h6">Patient ID: {appt.patientGeneratedId}</Typography>
                         <Typography variant="body2" color="text.secondary">
-                          {appt.doctorName && appt.doctorName !== "Unassigned"
-                            ? `Handled by: ${appt.doctorName}`
-                            : "Shared clinic appointment"}
+                          Consultation-ready shared appointment
                         </Typography>
+                      </Box>
 
-                        {!isCompleted && (
-                          <>
-                            <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
-                              <Button
-                                variant="contained"
-                                onClick={() => navigate(`/doctor/appointments/${appt.id}/consultation`)}
-                              >
-                                Appointment Completed
-                              </Button>
-                              <Button
-                                variant="outlined"
-                                onClick={() =>
-                                  setRescheduleDraft((current) => ({
-                                    ...current,
-                                    [appt.id]: current[appt.id] ?? { date: appt.date, time: appt.time },
-                                  }))
-                                }
-                              >
-                                Appointment Reschedule
-                              </Button>
-                            </Stack>
+                      <Typography variant="body2">
+                        {appt.date} at {appt.time}
+                      </Typography>
+                      <Typography variant="body2">Status: {appt.status}</Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        {appt.doctorGeneratedId
+                          ? `Handled by Doctor ID: ${appt.doctorGeneratedId}`
+                          : "Shared clinic appointment"}
+                      </Typography>
 
-                            {rescheduleDraft[appt.id] && (
-                              <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
-                                <TextField
-                                  type="date"
-                                  label="New Date"
-                                  InputLabelProps={{ shrink: true }}
-                                  value={rescheduleDraft[appt.id]?.date || ""}
-                                  onChange={(event) =>
-                                    setRescheduleDraft((current) => ({
-                                      ...current,
-                                      [appt.id]: {
-                                        ...current[appt.id],
-                                        date: event.target.value,
-                                      },
-                                    }))
-                                  }
-                                />
-                                <TextField
-                                  type="time"
-                                  label="New Time"
-                                  InputLabelProps={{ shrink: true }}
-                                  value={rescheduleDraft[appt.id]?.time || ""}
-                                  onChange={(event) =>
-                                    setRescheduleDraft((current) => ({
-                                      ...current,
-                                      [appt.id]: {
-                                        ...current[appt.id],
-                                        time: event.target.value,
-                                      },
-                                    }))
-                                  }
-                                />
-                                <Button variant="contained" onClick={() => handleReschedule(appt.id)}>
-                                  Save
-                                </Button>
-                              </Stack>
-                            )}
-                          </>
-                        )}
+                      <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
+                        <Button
+                          variant="contained"
+                          onClick={() => navigate(`/doctor/appointments/${appt.id}/consultation`)}
+                        >
+                          Appointment Completed
+                        </Button>
+                        <Button
+                          variant="outlined"
+                          onClick={() =>
+                            setRescheduleDraft((current) => ({
+                              ...current,
+                              [appt.id]: current[appt.id] ?? { date: appt.date, time: appt.time },
+                            }))
+                          }
+                        >
+                          Appointment Reschedule
+                        </Button>
                       </Stack>
-                    </CardContent>
-                  </Card>
-                );
-              })
+
+                      {rescheduleDraft[appt.id] && (
+                        <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
+                          <TextField
+                            type="date"
+                            label="New Date"
+                            InputLabelProps={{ shrink: true }}
+                            value={rescheduleDraft[appt.id]?.date || ""}
+                            onChange={(event) =>
+                              setRescheduleDraft((current) => ({
+                                ...current,
+                                [appt.id]: {
+                                  ...current[appt.id],
+                                  date: event.target.value,
+                                },
+                              }))
+                            }
+                          />
+                          <TextField
+                            type="time"
+                            label="New Time"
+                            InputLabelProps={{ shrink: true }}
+                            value={rescheduleDraft[appt.id]?.time || ""}
+                            onChange={(event) =>
+                              setRescheduleDraft((current) => ({
+                                ...current,
+                                [appt.id]: {
+                                  ...current[appt.id],
+                                  time: event.target.value,
+                                },
+                              }))
+                            }
+                          />
+                          <Button variant="contained" onClick={() => handleReschedule(appt.id)}>
+                            Save
+                          </Button>
+                        </Stack>
+                      )}
+                    </Stack>
+                  </CardContent>
+                </Card>
+              ))
             )}
+
           </Stack>
         </Grid>
 
         <Grid item xs={12} lg={7}>
           <AppointmentCalendar
-            appointments={appointments}
+            appointments={activeAppointments}
             selectedDate={selectedDate}
             onDateSelect={setSelectedDate}
             readOnly
@@ -172,6 +183,32 @@ function DoctorAppointments() {
           />
         </Grid>
       </Grid>
+      )}
+
+      {tab === "completed" && (
+        <Stack spacing={2}>
+          {completedAppointments.length === 0 ? (
+            <Alert severity="info">No completed appointments yet.</Alert>
+          ) : (
+            completedAppointments.map((appt) => (
+              <Card key={appt.id} sx={{ border: "1px solid #ddd", boxShadow: "none", bgcolor: "#f8fbfc" }}>
+                <CardContent>
+                  <Typography variant="h6">Patient ID: {appt.patientGeneratedId}</Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    {appt.date} at {appt.time}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Completed by Doctor ID: {appt.doctorGeneratedId || "Not assigned"}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                    Completed consultations are locked and cannot be edited or rescheduled.
+                  </Typography>
+                </CardContent>
+              </Card>
+            ))
+          )}
+        </Stack>
+      )}
     </Box>
   );
 }

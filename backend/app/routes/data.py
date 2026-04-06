@@ -15,6 +15,8 @@ from ..services.ftsst_analysis import analyse_ftsst
 from ..utils.video import create_browser_playable_video, get_video_metadata
 from ..api_schemas import (
     AppointmentCreateRequest,
+    BillingAlertRequest,
+    BillingPaidRequest,
     ConsultationSaveRequest,
     AppointmentStatusUpdateRequest,
     MedicalRecordCreateRequest,
@@ -165,6 +167,13 @@ def serialize_consultation(consultation: Consultation | None) -> dict | None:
         except json.JSONDecodeError:
             alert_flags = []
 
+    tosp_codes = []
+    if consultation.tosp_codes_json:
+        try:
+            tosp_codes = json.loads(consultation.tosp_codes_json)
+        except json.JSONDecodeError:
+            tosp_codes = []
+
     return {
         "id": consultation.id,
         "appointmentId": consultation.appointment_id,
@@ -186,8 +195,53 @@ def serialize_consultation(consultation: Consultation | None) -> dict | None:
         "priority": consultation.priority or "Normal",
         "notesToPatient": consultation.notes_to_patient or "",
         "alertFlags": alert_flags,
+        "tospCodes": tosp_codes,
+        "billProviderEmail": consultation.bill_provider_email or "",
+        "billStatus": consultation.bill_status or "",
+        "billSentAt": consultation.bill_sent_at.isoformat() if consultation.bill_sent_at else None,
+        "patientBillStatus": consultation.patient_bill_status or "Unpaid",
+        "patientBillAlertSentAt": consultation.patient_bill_alert_sent_at.isoformat() if consultation.patient_bill_alert_sent_at else None,
+        "patientBillPaidAt": consultation.patient_bill_paid_at.isoformat() if consultation.patient_bill_paid_at else None,
         "createdAt": consultation.created_at.isoformat() if consultation.created_at else None,
         "updatedAt": consultation.updated_at.isoformat() if consultation.updated_at else None,
+    }
+
+
+def calculate_tosp_total(tosp_codes: list[dict]) -> float:
+    return round(sum(float(item.get("amount") or 0) for item in tosp_codes), 2)
+
+
+def serialize_bill(consultation: Consultation, patient: User | None, doctor: User | None) -> dict:
+    consultation_data = serialize_consultation(consultation) or {}
+    tosp_codes = consultation_data.get("tospCodes", [])
+    total_amount = calculate_tosp_total(tosp_codes)
+    sent_at = consultation.bill_sent_at or consultation.created_at
+    days_owed = 0
+    if sent_at and not consultation.patient_bill_paid_at:
+        now = datetime.now(sent_at.tzinfo) if sent_at.tzinfo else datetime.now()
+        days_owed = max((now - sent_at).days, 0)
+
+    return {
+        "id": consultation.id,
+        "appointmentId": consultation.appointment_id,
+        "medicalRecordId": consultation.medical_record_id,
+        "patientId": consultation.patient_user_id,
+        "patientGeneratedId": patient.generated_id if patient else "",
+        "patientName": patient.name if patient else "Unknown",
+        "doctorId": consultation.doctor_user_id,
+        "doctorGeneratedId": doctor.generated_id if doctor else "",
+        "doctorName": doctor.name if doctor else "Unknown",
+        "tospCodes": tosp_codes,
+        "medications": consultation_data.get("medications", []),
+        "totalAmount": total_amount,
+        "providerEmail": consultation.bill_provider_email or "",
+        "providerEmailStatus": consultation.bill_status or "Not sent",
+        "providerEmailSentAt": consultation.bill_sent_at.isoformat() if consultation.bill_sent_at else None,
+        "patientBillStatus": consultation.patient_bill_status or "Unpaid",
+        "patientBillAlertSentAt": consultation.patient_bill_alert_sent_at.isoformat() if consultation.patient_bill_alert_sent_at else None,
+        "patientBillPaidAt": consultation.patient_bill_paid_at.isoformat() if consultation.patient_bill_paid_at else None,
+        "daysOwed": days_owed,
+        "createdAt": consultation.created_at.isoformat() if consultation.created_at else None,
     }
 
 
@@ -221,6 +275,7 @@ def ensure_consultation_entry_for_completed_appointment(
         priority="Normal",
         alert_flags_json="[]",
         medications_json="[]",
+        tosp_codes_json="[]",
     )
     db.add(consultation)
     db.flush()
@@ -648,6 +703,17 @@ def save_appointment_consultation(
     consultation.priority = payload.priority or "Normal"
     consultation.notes_to_patient = payload.notes_to_patient or None
     consultation.alert_flags_json = json.dumps(payload.alert_flags)
+    consultation.tosp_codes_json = json.dumps([item.model_dump() for item in payload.tosp_codes])
+    consultation.bill_provider_email = payload.bill_provider_email or None
+    now = datetime.now(timezone.utc)
+    has_bill_items = bool(payload.tosp_codes or payload.medications)
+    if payload.send_bill_email or has_bill_items:
+        consultation.bill_provider_email = consultation.bill_provider_email or "billing@hospital.example"
+        consultation.bill_status = "Email sent to healthcare provider and patient"
+        consultation.bill_sent_at = now
+        consultation.patient_bill_status = consultation.patient_bill_status or "Unpaid"
+    elif not consultation.bill_status:
+        consultation.bill_status = "Not sent"
 
     consultation_record.doctor_user_id = payload.doctor_user_id
     consultation_record.result = "Completed"
@@ -854,6 +920,104 @@ def update_alert_action(record_id: int, payload: RecordAlertActionRequest, db: S
     db.commit()
     refreshed_record = db.query(MedicalRecord).filter(MedicalRecord.id == record_id).first()
     return _serialize_records(db, [refreshed_record])[0]
+
+
+@router.get("/billing/patient/{patient_id}")
+def get_patient_billing(patient_id: int, db: Session = Depends(get_db)):
+    consultations = (
+        db.query(Consultation)
+        .filter(
+            Consultation.patient_user_id == patient_id,
+            Consultation.bill_status.isnot(None),
+        )
+        .order_by(Consultation.created_at.desc(), Consultation.id.desc())
+        .all()
+    )
+    user_ids = {patient_id} | {consultation.doctor_user_id for consultation in consultations}
+    users_by_id = {
+        user.id: user for user in db.query(User).filter(User.id.in_(user_ids)).all()
+    } if user_ids else {}
+    return [
+        serialize_bill(
+            consultation,
+            users_by_id.get(consultation.patient_user_id),
+            users_by_id.get(consultation.doctor_user_id),
+        )
+        for consultation in consultations
+    ]
+
+
+@router.get("/billing")
+def get_all_billing(db: Session = Depends(get_db)):
+    consultations = (
+        db.query(Consultation)
+        .filter(Consultation.bill_status.isnot(None))
+        .order_by(Consultation.created_at.desc(), Consultation.id.desc())
+        .all()
+    )
+    user_ids = {
+        consultation.patient_user_id for consultation in consultations
+    } | {
+        consultation.doctor_user_id for consultation in consultations
+    }
+    users_by_id = {
+        user.id: user for user in db.query(User).filter(User.id.in_(user_ids)).all()
+    } if user_ids else {}
+    return [
+        serialize_bill(
+            consultation,
+            users_by_id.get(consultation.patient_user_id),
+            users_by_id.get(consultation.doctor_user_id),
+        )
+        for consultation in consultations
+    ]
+
+
+@router.post("/billing/{consultation_id}/alert")
+def send_billing_alert(consultation_id: int, payload: BillingAlertRequest, db: Session = Depends(get_db)):
+    admin = db.query(User).filter(User.id == payload.admin_user_id, User.role == "Admin").first()
+    if not admin:
+        raise HTTPException(status_code=404, detail="Admin not found.")
+
+    consultation = db.query(Consultation).filter(Consultation.id == consultation_id).first()
+    if not consultation:
+        raise HTTPException(status_code=404, detail="Bill not found.")
+
+    consultation.patient_bill_alert_sent_at = datetime.now(timezone.utc)
+    if consultation.patient_bill_status != "Paid":
+        consultation.patient_bill_status = "Payment reminder sent"
+    db.commit()
+    db.refresh(consultation)
+
+    patient = db.query(User).filter(User.id == consultation.patient_user_id).first()
+    doctor = db.query(User).filter(User.id == consultation.doctor_user_id).first()
+    return serialize_bill(consultation, patient, doctor)
+
+
+@router.post("/billing/{consultation_id}/paid")
+def mark_billing_paid(consultation_id: int, payload: BillingPaidRequest, db: Session = Depends(get_db)):
+    consultation = db.query(Consultation).filter(Consultation.id == consultation_id).first()
+    if not consultation:
+        raise HTTPException(status_code=404, detail="Bill not found.")
+
+    if consultation.patient_user_id != payload.patient_user_id:
+        raise HTTPException(status_code=403, detail="This bill does not belong to the patient.")
+
+    consultation.patient_bill_status = "Paid"
+    consultation.patient_bill_paid_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(consultation)
+
+    patient = db.query(User).filter(User.id == consultation.patient_user_id).first()
+    doctor = db.query(User).filter(User.id == consultation.doctor_user_id).first()
+    return serialize_bill(consultation, patient, doctor)
+
+
+@router.post("/billing/paid")
+def mark_billing_paid_fallback(payload: BillingPaidRequest, db: Session = Depends(get_db)):
+    if not payload.consultation_id:
+        raise HTTPException(status_code=400, detail="Bill ID is required.")
+    return mark_billing_paid(payload.consultation_id, payload, db)
 
 
 @router.post("/records/{record_id}/notes")

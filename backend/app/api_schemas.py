@@ -6,6 +6,7 @@ class LoginRequest(BaseModel):
     email: EmailStr
     password: str
     portal: str
+    two_factor_code: str | None = None
 
 
 class PatientSignupRequest(BaseModel):
@@ -85,6 +86,12 @@ class ConsultationMedicationItem(BaseModel):
     instructions: str | None = None
 
 
+class ConsultationTospCodeItem(BaseModel):
+    code: str
+    description: str | None = None
+    amount: float | None = None
+
+
 class ConsultationSaveRequest(BaseModel):
     doctor_user_id: int
     medical_record_id: int | None = None
@@ -103,6 +110,9 @@ class ConsultationSaveRequest(BaseModel):
     priority: str | None = None
     notes_to_patient: str | None = None
     alert_flags: list[str] = []
+    tosp_codes: list[ConsultationTospCodeItem] = []
+    bill_provider_email: str | None = None
+    send_bill_email: bool = False
 
 
 class NoteCreateRequest(BaseModel):
@@ -114,6 +124,15 @@ class NoteCreateRequest(BaseModel):
 class RecordAlertActionRequest(BaseModel):
     doctor_user_id: int
     action: str
+
+
+class BillingAlertRequest(BaseModel):
+    admin_user_id: int
+
+
+class BillingPaidRequest(BaseModel):
+    patient_user_id: int
+    consultation_id: int | None = None
 
 
 class MedicalRecordCreateRequest(BaseModel):

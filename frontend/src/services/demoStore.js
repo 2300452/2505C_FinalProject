@@ -50,9 +50,14 @@ export async function saveRecords() {
   return null;
 }
 
-export async function authenticateUser({ portal, email, password }) {
+export async function authenticateUser({ portal, email, password, twoFactorCode }) {
   try {
-    const response = await api.post("/auth/login", { portal, email, password });
+    const response = await api.post("/auth/login", {
+      portal,
+      email,
+      password,
+      two_factor_code: twoFactorCode || null,
+    });
     return response.data;
   } catch (error) {
     throw toError(error, "Invalid email or password.");
@@ -329,6 +334,9 @@ export async function saveAppointmentConsultation(appointmentId, payload) {
       priority: payload.priority || "Normal",
       notes_to_patient: payload.notesToPatient || "",
       alert_flags: payload.alertFlags || [],
+      tosp_codes: payload.tospCodes || [],
+      bill_provider_email: payload.billProviderEmail || "",
+      send_bill_email: Boolean(payload.sendBillEmail),
     });
     return response.data;
   } catch (error) {
@@ -460,6 +468,57 @@ export async function appendDoctorNote(recordId, doctorId, noteText) {
     return response.data;
   } catch (error) {
     throw toError(error, "Failed to add doctor note.");
+  }
+}
+
+export async function getBillingForPatient(patientId) {
+  try {
+    const response = await api.get(`/data/billing/patient/${patientId}`);
+    return response.data;
+  } catch (error) {
+    throw toError(error, "Failed to load patient billing.");
+  }
+}
+
+export async function getAllBilling() {
+  try {
+    const response = await api.get("/data/billing");
+    return response.data;
+  } catch (error) {
+    throw toError(error, "Failed to load billing.");
+  }
+}
+
+export async function sendBillingAlert(consultationId, adminUserId) {
+  try {
+    const response = await api.post(`/data/billing/${consultationId}/alert`, {
+      admin_user_id: adminUserId,
+    });
+    return response.data;
+  } catch (error) {
+    throw toError(error, "Failed to send billing alert.");
+  }
+}
+
+export async function markBillingPaid(consultationId, patientUserId) {
+  try {
+    const response = await api.post(`/data/billing/${consultationId}/paid`, {
+      patient_user_id: patientUserId,
+    });
+    return response.data;
+  } catch (error) {
+    if (error?.response?.status === 404) {
+      try {
+        const response = await api.post("/data/billing/paid", {
+          consultation_id: consultationId,
+          patient_user_id: patientUserId,
+        });
+        return response.data;
+      } catch (fallbackError) {
+        throw toError(fallbackError, "Failed to mark bill as paid.");
+      }
+    }
+    throw toError(error, "Failed to mark bill as paid.");
   }
 }
 

@@ -94,6 +94,8 @@ function AdminUserProfilePage() {
 
   const user = profile?.user ?? null;
   const appointments = profile?.appointments ?? [];
+  const activeAppointments = appointments.filter((appointment) => appointment.status !== "Completed");
+  const completedAppointments = appointments.filter((appointment) => appointment.status === "Completed");
   const records = profile?.records ?? [];
   const orderedRecords = [...records].sort(
     (left, right) => new Date(right.createdAt || 0).getTime() - new Date(left.createdAt || 0).getTime()
@@ -320,11 +322,11 @@ function AdminUserProfilePage() {
                 Appointments
               </Typography>
 
-              {appointments.length === 0 ? (
+              {activeAppointments.length === 0 ? (
                 <Typography>No appointments found.</Typography>
               ) : (
                 <Stack spacing={2}>
-                  {appointments.map((appointment) => (
+                  {activeAppointments.map((appointment) => (
                     <Box key={appointment.id} sx={{ border: "1px solid #ddd", borderRadius: 2, p: 2 }}>
                       <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between" spacing={1}>
                         <Typography sx={{ fontWeight: 700 }}>
@@ -337,6 +339,40 @@ function AdminUserProfilePage() {
                       </Typography>
                       <Typography variant="body2">
                         Doctor: {appointment.doctorName} {appointment.doctorGeneratedId ? `(${appointment.doctorGeneratedId})` : ""}
+                      </Typography>
+                    </Box>
+                  ))}
+                </Stack>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card sx={{ mb: 3 }}>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>
+                Completed Appointments
+              </Typography>
+
+              {completedAppointments.length === 0 ? (
+                <Typography>No completed appointments found.</Typography>
+              ) : (
+                <Stack spacing={2}>
+                  {completedAppointments.map((appointment) => (
+                    <Box key={appointment.id} sx={{ border: "1px solid #ddd", borderRadius: 2, p: 2, bgcolor: "#f8fbfc" }}>
+                      <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between" spacing={1}>
+                        <Typography sx={{ fontWeight: 700 }}>
+                          {appointment.date} at {appointment.time}
+                        </Typography>
+                        <Chip label={appointment.status} size="small" color="success" />
+                      </Stack>
+                      <Typography variant="body2">
+                        Patient ID: {appointment.patientGeneratedId}
+                      </Typography>
+                      <Typography variant="body2">
+                        Doctor: {appointment.doctorName} {appointment.doctorGeneratedId ? `(${appointment.doctorGeneratedId})` : ""}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Completed consultations are locked and cannot be edited or rescheduled.
                       </Typography>
                     </Box>
                   ))}

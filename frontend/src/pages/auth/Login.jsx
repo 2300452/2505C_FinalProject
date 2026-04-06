@@ -11,6 +11,7 @@ import {
 } from "@mui/material";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";
+import DummyQrCode from "../../components/auth/DummyQrCode";
 
 function Login({ portal = "staff" }) {
   const [form, setForm] = useState({
@@ -21,6 +22,8 @@ function Login({ portal = "staff" }) {
   const [message, setMessage] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [forceChangeMode, setForceChangeMode] = useState(false);
+  const [twoFactorChallenge, setTwoFactorChallenge] = useState(null);
+  const [twoFactorCode, setTwoFactorCode] = useState("");
 
   const navigate = useNavigate();
   const { login, logout, changeOwnPassword } = useAuth();
@@ -38,6 +41,11 @@ function Login({ portal = "staff" }) {
 
     try {
       const loggedInUser = await login(form);
+      if (loggedInUser.requiresTwoFactor) {
+        setTwoFactorChallenge(loggedInUser);
+        setMessage("Enter the 2FA number shown in the QR code.");
+        return;
+      }
 
       if (loggedInUser.mustChangePassword) {
         setForceChangeMode(true);
@@ -73,6 +81,35 @@ function Login({ portal = "staff" }) {
     setNewPassword("");
   };
 
+  const handleTwoFactorLogin = async (e) => {
+    e.preventDefault();
+    setMessage("");
+
+    try {
+      const loggedInUser = await login({
+        ...form,
+        twoFactorCode,
+      });
+
+      if (loggedInUser.requiresTwoFactor) {
+        setMessage("Invalid 2FA number. Please enter the number shown in the QR code.");
+        return;
+      }
+
+      if (loggedInUser.mustChangePassword) {
+        setForceChangeMode(true);
+        setMessage("You must change your password before continuing.");
+        return;
+      }
+
+      if (loggedInUser.role === "Admin") navigate("/admin/dashboard");
+      if (loggedInUser.role === "Doctor") navigate("/doctor/dashboard");
+      if (loggedInUser.role === "Patient") navigate("/patient/dashboard");
+    } catch (error) {
+      setMessage(error.message);
+    }
+  };
+
   const isStaff = portal === "staff";
 
   return (
@@ -97,23 +134,43 @@ function Login({ portal = "staff" }) {
                 : "Welcome back. Sign in to view your appointments and assessments."}
             </Typography>
 
-            {isStaff && (
-              <Typography variant="body1" sx={{ mb: 3, color: "text.secondary" }}>
-                Breakglass root admin account:
-                <br />
-                <strong>Email:</strong> admin@patientbuddy.com
-                <br />
-                <strong>Password:</strong> Admin123!
-              </Typography>
-            )}
-
             {message && (
-              <Alert severity={forceChangeMode ? "warning" : "error"} sx={{ mb: 2 }}>
+              <Alert severity={twoFactorChallenge && !forceChangeMode ? "info" : forceChangeMode ? "warning" : "error"} sx={{ mb: 2 }}>
                 {message}
               </Alert>
             )}
 
-            {!forceChangeMode ? (
+            {twoFactorChallenge && !forceChangeMode ? (
+              <Box component="form" onSubmit={handleTwoFactorLogin}>
+                <Box sx={{ textAlign: "center", my: 3 }}>
+                  <DummyQrCode code={twoFactorChallenge.twoFactorCode} />
+                </Box>
+                <TextField
+                  label="2FA Code"
+                  fullWidth
+                  margin="normal"
+                  value={twoFactorCode}
+                  onChange={(e) => setTwoFactorCode(e.target.value)}
+                  sx={{ "& .MuiInputBase-input": { fontSize: 18, py: 1.2 } }}
+                />
+                <Button type="submit" variant="contained" fullWidth size="large" sx={{ mt: 3, py: 1.5, fontSize: 18 }}>
+                  Verify 2FA and Login
+                </Button>
+                <Button
+                  type="button"
+                  variant="text"
+                  fullWidth
+                  sx={{ mt: 1.5, fontSize: 16 }}
+                  onClick={() => {
+                    setTwoFactorChallenge(null);
+                    setTwoFactorCode("");
+                    setMessage("");
+                  }}
+                >
+                  Back to password login
+                </Button>
+              </Box>
+            ) : !forceChangeMode ? (
               <Box component="form" onSubmit={handleLogin}>
                 <TextField
                   label="Email"

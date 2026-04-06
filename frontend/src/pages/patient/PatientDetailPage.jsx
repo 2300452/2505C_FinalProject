@@ -55,7 +55,7 @@ function PatientDetailPage() {
           <strong>Patient UUID:</strong> {patient.uuid}
         </p>
         <p className="mb-2">
-          <strong>Name:</strong> {patient.name}
+          <strong>Patient ID:</strong> {patient.generatedId || patient.uuid}
         </p>
         <p className="mb-2">
           <strong>NRIC / ID:</strong> {patient.nric}

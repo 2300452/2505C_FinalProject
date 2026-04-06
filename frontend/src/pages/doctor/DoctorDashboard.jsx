@@ -19,7 +19,6 @@ import {
   getAppointments,
   getFailedAlerts,
   getPatients,
-  getRecords,
 } from "../../services/demoStore";
 
 function DoctorDashboard() {
@@ -28,7 +27,6 @@ function DoctorDashboard() {
   const [appointments, setAppointments] = useState([]);
   const [alerts, setAlerts] = useState([]);
   const [patients, setPatients] = useState([]);
-  const [records, setRecords] = useState([]);
 
   useEffect(() => {
     if (!user) return;
@@ -36,19 +34,16 @@ function DoctorDashboard() {
       getAppointments(),
       getFailedAlerts(),
       getPatients(),
-      getRecords(),
     ])
-      .then(([appointmentData, alertData, patientData, recordData]) => {
+      .then(([appointmentData, alertData, patientData]) => {
         setAppointments(appointmentData);
         setAlerts(alertData);
         setPatients(patientData);
-        setRecords(recordData);
       })
       .catch(() => {
         setAppointments([]);
         setAlerts([]);
         setPatients([]);
-        setRecords([]);
       });
   }, [user]);
 
@@ -56,11 +51,14 @@ function DoctorDashboard() {
     () => appointments.filter((item) => item.status === "Booked" || item.status === "Rescheduled").length,
     [appointments]
   );
-
+  const activeAppointments = useMemo(
+    () => appointments.filter((item) => item.status === "Booked" || item.status === "Rescheduled"),
+    [appointments]
+  );
   const statCards = [
     {
       title: "Doctor Schedule",
-      value: appointments.length,
+      value: activeAppointments.length,
       icon: <CalendarMonthOutlinedIcon sx={{ fontSize: 30 }} />,
       onClick: () => navigate("/doctor/appointments"),
     },
@@ -99,7 +97,7 @@ function DoctorDashboard() {
           Doctor Schedule
         </Typography>
         <Typography variant="body2" sx={{ opacity: 0.9 }}>
-          Welcome back, {user?.name}. Review appointments, alerts, and patient records from one place.
+          Welcome back, Doctor ID {user?.generatedId}. Review appointments, alerts, and patient records from one place.
         </Typography>
       </Paper>
 
@@ -135,18 +133,18 @@ function DoctorDashboard() {
       </Grid>
 
       <Grid container spacing={2}>
-        <Grid item xs={12} lg={4}>
+        <Grid item xs={12} lg={5}>
           <Card sx={{ height: "100%", boxShadow: "none", border: "1px solid #dbe4e8" }}>
             <CardContent>
               <Typography variant="h6" gutterBottom>
                 Appointment Notifications
               </Typography>
 
-              {appointments.length === 0 ? (
+              {activeAppointments.length === 0 ? (
                 <Alert severity="info">No patient appointments booked yet.</Alert>
               ) : (
                 <Stack spacing={2}>
-                  {appointments.slice(0, 8).map((appt, index) => (
+                  {activeAppointments.slice(0, 8).map((appt, index) => (
                     <Box
                       key={appt.id}
                       sx={{
@@ -156,9 +154,6 @@ function DoctorDashboard() {
                     >
                       <Typography variant="body2" sx={{ fontWeight: 700 }}>
                         Patient ID: {appt.patientGeneratedId}
-                      </Typography>
-                      <Typography variant="caption" display="block" color="text.secondary">
-                        {appt.patientGeneratedId}
                       </Typography>
                       <Typography variant="caption" display="block">
                         {appt.date} at {appt.time}
@@ -174,18 +169,18 @@ function DoctorDashboard() {
           </Card>
         </Grid>
 
-        <Grid item xs={12} lg={5}>
+        <Grid item xs={12} lg={7}>
           <Card sx={{ height: "100%", boxShadow: "none", border: "1px solid #dbe4e8" }}>
             <CardContent>
               <Typography variant="h6" gutterBottom>
                 Shared Clinic Appointments
               </Typography>
 
-              {appointments.length === 0 ? (
+              {activeAppointments.length === 0 ? (
                 <Alert severity="info">No scheduled appointments.</Alert>
               ) : (
                 <Stack spacing={2}>
-                  {appointments.slice(0, 6).map((item) => (
+                  {activeAppointments.slice(0, 6).map((item) => (
                     <Box
                       key={item.id}
                       sx={{
@@ -208,42 +203,6 @@ function DoctorDashboard() {
                   ))}
                 </Stack>
               )}
-            </CardContent>
-          </Card>
-        </Grid>
-
-        <Grid item xs={12} lg={3}>
-          <Card sx={{ height: "100%", boxShadow: "none", border: "1px solid #dbe4e8" }}>
-            <CardContent>
-              <Typography variant="h6" gutterBottom>
-                Quick Snapshot
-              </Typography>
-              <Stack spacing={2}>
-                <Box>
-                  <Typography variant="body2" color="text.secondary">
-                    Total Records
-                  </Typography>
-                  <Typography variant="h5" sx={{ fontWeight: 700 }}>
-                    {records.length}
-                  </Typography>
-                </Box>
-                <Box>
-                  <Typography variant="body2" color="text.secondary">
-                    Alert Cases
-                  </Typography>
-                  <Typography variant="h5" sx={{ fontWeight: 700, color: alerts.length ? "#d96459" : "#16b3ae" }}>
-                    {alerts.length}
-                  </Typography>
-                </Box>
-                <Box>
-                  <Typography variant="body2" color="text.secondary">
-                    Patients Tracked
-                  </Typography>
-                  <Typography variant="h5" sx={{ fontWeight: 700 }}>
-                    {patients.length}
-                  </Typography>
-                </Box>
-              </Stack>
             </CardContent>
           </Card>
         </Grid>

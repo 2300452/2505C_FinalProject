@@ -1,6 +1,7 @@
 from sqlalchemy.orm import Session
 from fastapi import APIRouter, Depends, HTTPException
 from datetime import date
+import secrets
 from ..db import get_db
 from ..models import User
 from ..api_schemas import (
@@ -12,6 +13,7 @@ from ..api_schemas import (
 from ..security import hash_password, verify_password
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+TWO_FACTOR_CODES: dict[int, str] = {}
 
 
 def next_patient_id(db: Session) -> str:
@@ -61,6 +63,10 @@ def calculate_age(dob) -> int | None:
     return today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
 
 
+def generate_two_factor_code() -> str:
+    return f"{secrets.randbelow(900000) + 100000}"
+
+
 def get_report_to_user(user: User) -> User | None:
     return getattr(user, "_report_to_user", None)
 
@@ -91,6 +97,25 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
     if not user or not verify_password(payload.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid email or password.")
 
+    expected_code = TWO_FACTOR_CODES.get(user.id)
+    if payload.two_factor_code and expected_code and payload.two_factor_code == expected_code:
+        TWO_FACTOR_CODES.pop(user.id, None)
+        attach_reports_to([user], db)
+        return serialize_user(user)
+
+    expected_code = generate_two_factor_code()
+    TWO_FACTOR_CODES[user.id] = expected_code
+    if payload.two_factor_code != expected_code:
+        attach_reports_to([user], db)
+        return {
+            "requiresTwoFactor": True,
+            "twoFactorCode": expected_code,
+            "qrPayload": f"PatientBuddy 2FA code: {expected_code}",
+            "email": user.email,
+            "user": serialize_user(user),
+        }
+
+    TWO_FACTOR_CODES.pop(user.id, None)
     attach_reports_to([user], db)
     return serialize_user(user)
 

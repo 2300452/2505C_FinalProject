@@ -8,9 +8,14 @@ import {
 
 const AuthContext = createContext();
 
+function generateTwoFactorCode() {
+  return String(Math.floor(Math.random() * 900000) + 100000);
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [ready, setReady] = useState(false);
+  const [pendingTwoFactor, setPendingTwoFactor] = useState(null);
 
   useEffect(() => {
     const restoreUser = async () => {
@@ -34,15 +39,89 @@ export function AuthProvider({ children }) {
     restoreUser();
   }, []);
 
-  const login = async ({ portal, email, password }) => {
-    const foundUser = await authenticateUser({ portal, email, password });
-    sessionStorage.setItem("pb_current_user_id", String(foundUser.id));
-    setUser(foundUser);
-    return foundUser;
+  const login = async ({ portal, email, password, twoFactorCode }) => {
+    const challengeKey = `${portal}:${String(email || "").toLowerCase()}`;
+    if (twoFactorCode && pendingTwoFactor?.key === challengeKey) {
+      if (twoFactorCode === pendingTwoFactor.code) {
+        let verifiedUser = pendingTwoFactor.user;
+
+        if (!verifiedUser && pendingTwoFactor.backendCode) {
+          const redeemedUser = await authenticateUser({
+            portal,
+            email,
+            password,
+            twoFactorCode: pendingTwoFactor.backendCode,
+          });
+          verifiedUser = redeemedUser.requiresTwoFactor ? redeemedUser.user : redeemedUser;
+        }
+
+        if (!verifiedUser?.id) {
+          return {
+            requiresTwoFactor: true,
+            twoFactorCode: pendingTwoFactor.code,
+            qrPayload: `PatientBuddy 2FA code: ${pendingTwoFactor.code}`,
+            email,
+          };
+        }
+
+        sessionStorage.setItem("pb_current_user_id", String(verifiedUser.id));
+        setUser(verifiedUser);
+        setPendingTwoFactor(null);
+        return verifiedUser;
+      }
+
+      return {
+        requiresTwoFactor: true,
+        twoFactorCode: pendingTwoFactor.code,
+        qrPayload: `PatientBuddy 2FA code: ${pendingTwoFactor.code}`,
+        email,
+      };
+    }
+
+    const foundUser = await authenticateUser({ portal, email, password, twoFactorCode });
+    if (foundUser.requiresTwoFactor) {
+      const expectedCode = generateTwoFactorCode();
+      setPendingTwoFactor({
+        key: challengeKey,
+        code: expectedCode,
+        backendCode: foundUser.twoFactorCode,
+        user: foundUser.user || null,
+      });
+      return {
+        ...foundUser,
+        twoFactorCode: expectedCode,
+        qrPayload: `PatientBuddy 2FA code: ${expectedCode}`,
+      };
+    }
+
+    if (twoFactorCode && !pendingTwoFactor) {
+      sessionStorage.setItem("pb_current_user_id", String(foundUser.id));
+      setUser(foundUser);
+      return foundUser;
+    }
+
+    const expectedCode = generateTwoFactorCode();
+    setPendingTwoFactor({ key: challengeKey, code: expectedCode, user: foundUser });
+    if (!twoFactorCode) {
+      return {
+        requiresTwoFactor: true,
+        twoFactorCode: expectedCode,
+        qrPayload: `PatientBuddy 2FA code: ${expectedCode}`,
+        email: foundUser.email,
+      };
+    }
+
+    return {
+      requiresTwoFactor: true,
+      twoFactorCode: expectedCode,
+      qrPayload: `PatientBuddy 2FA code: ${expectedCode}`,
+      email: foundUser.email,
+    };
   };
 
   const logout = () => {
     sessionStorage.removeItem("pb_current_user_id");
+    setPendingTwoFactor(null);
     setUser(null);
   };
 

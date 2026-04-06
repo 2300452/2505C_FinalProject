@@ -8,13 +8,11 @@ import { useEffect, useMemo, useState } from "react";
 import {
   Alert,
   Box,
-  Button,
   Card,
   CardContent,
   Grid,
   Paper,
   Stack,
-  TextField,
   Typography,
 } from "@mui/material";
 import { useNavigate } from "react-router-dom";
@@ -23,7 +21,6 @@ import {
   getDoctors,
   getPatients,
   getUsers,
-  rescheduleAppointment,
 } from "../../services/demoStore";
 
 function AdminDashboard() {
@@ -33,7 +30,6 @@ function AdminDashboard() {
   const [appointments, setAppointments] = useState([]);
   const [users, setUsers] = useState([]);
   const [message, setMessage] = useState("");
-  const [rescheduleForm, setRescheduleForm] = useState({});
 
   const loadData = async () => {
     const [doctorData, patientData, appointmentData, userData] = await Promise.all([
@@ -52,25 +48,13 @@ function AdminDashboard() {
     loadData().catch((error) => setMessage(error.message));
   }, []);
 
-  const handleReschedule = async (appointmentId) => {
-    try {
-      const current = rescheduleForm[appointmentId];
-      if (!current?.date || !current?.time) {
-        setMessage("Please enter both date and time for rescheduling.");
-        return;
-      }
-
-      await rescheduleAppointment(appointmentId, current.date, current.time);
-      setMessage("Appointment rescheduled successfully.");
-      await loadData();
-    } catch (error) {
-      setMessage(error.message);
-    }
-  };
-
   const recycledCount = useMemo(
     () => users.filter((item) => item.isDeleted).length,
     [users]
+  );
+  const activeAppointments = useMemo(
+    () => appointments.filter((item) => item.status !== "Completed"),
+    [appointments]
   );
   const adminCount = useMemo(
     () => users.filter((item) => item.role === "Admin" && !item.isDeleted).length,
@@ -98,9 +82,9 @@ function AdminDashboard() {
     },
     {
       title: "Appointments",
-      value: appointments.length,
+      value: activeAppointments.length,
       icon: <CalendarMonthOutlinedIcon sx={{ fontSize: 32 }} />,
-      onClick: () => document.getElementById("admin-appointments")?.scrollIntoView({ behavior: "smooth" }),
+      onClick: () => navigate("/admin/appointments"),
     },
   ];
 
@@ -203,68 +187,6 @@ function AdminDashboard() {
           </Grid>
         ))}
       </Grid>
-
-      <Card id="admin-appointments" sx={{ boxShadow: "none", border: "1px solid #dde5ea" }}>
-        <CardContent>
-          <Typography variant="h6" gutterBottom>
-            Reschedule / Change Patient Appointment
-          </Typography>
-
-          {appointments.length === 0 ? (
-            <Typography>No appointments found.</Typography>
-          ) : (
-            <Stack spacing={2}>
-              {appointments.map((appt) => (
-                <Box
-                  key={appt.id}
-                  sx={{ border: "1px solid #ddd", borderRadius: 2, p: 2 }}
-                >
-                  <Typography><strong>Patient ID:</strong> {appt.patientGeneratedId}</Typography>
-                  <Typography><strong>Doctor:</strong> {appt.doctorName} ({appt.doctorGeneratedId || "Unassigned"})</Typography>
-                  <Typography><strong>Current Slot:</strong> {appt.date} {appt.time}</Typography>
-                  <Typography><strong>Status:</strong> {appt.status}</Typography>
-
-                  <Stack direction={{ xs: "column", md: "row" }} spacing={2} sx={{ mt: 2 }}>
-                    <TextField
-                      type="date"
-                      label="New Date"
-                      InputLabelProps={{ shrink: true }}
-                      value={rescheduleForm[appt.id]?.date || ""}
-                      onChange={(e) =>
-                        setRescheduleForm({
-                          ...rescheduleForm,
-                          [appt.id]: {
-                            ...rescheduleForm[appt.id],
-                            date: e.target.value,
-                          },
-                        })
-                      }
-                    />
-                    <TextField
-                      type="time"
-                      label="New Time"
-                      InputLabelProps={{ shrink: true }}
-                      value={rescheduleForm[appt.id]?.time || ""}
-                      onChange={(e) =>
-                        setRescheduleForm({
-                          ...rescheduleForm,
-                          [appt.id]: {
-                            ...rescheduleForm[appt.id],
-                            time: e.target.value,
-                          },
-                        })
-                      }
-                    />
-                    <Button variant="contained" onClick={() => handleReschedule(appt.id)}>
-                      Reschedule
-                    </Button>
-                  </Stack>
-                </Box>
-              ))}
-            </Stack>
-          )}
-        </CardContent>
-      </Card>
     </Box>
   );
 }

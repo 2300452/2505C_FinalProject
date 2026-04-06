@@ -91,6 +91,31 @@ function renderAnalysis(record) {
           <Typography variant="body2"><strong>Priority:</strong> {consultation.priority || "-"}</Typography>
           <Typography variant="body2"><strong>Notes to Patient:</strong> {consultation.notesToPatient || "-"}</Typography>
         </Box>
+
+        <Box>
+          <Typography variant="subtitle2" sx={{ mb: 1 }}>
+            Billing / TOSP
+          </Typography>
+          {consultation.tospCodes?.length ? (
+            <Stack spacing={0.5}>
+              {consultation.tospCodes.map((item) => (
+                <Typography key={item.code} variant="body2">
+                  {item.code} - {item.description || "-"} - ${Number(item.amount || 0).toFixed(2)}
+                </Typography>
+              ))}
+            </Stack>
+          ) : (
+            <Typography variant="body2">No TOSP codes selected.</Typography>
+          )}
+          {consultation.tospCodes?.length > 0 && (
+            <Typography variant="body2" sx={{ fontWeight: 700, mt: 0.5 }}>
+              Total: ${consultation.tospCodes.reduce((total, item) => total + Number(item.amount || 0), 0).toFixed(2)}
+            </Typography>
+          )}
+          <Typography variant="body2"><strong>Provider Email:</strong> {consultation.billProviderEmail || "-"}</Typography>
+          <Typography variant="body2"><strong>Bill Status:</strong> {consultation.billStatus || "Not sent"}</Typography>
+          <Typography variant="body2"><strong>Patient Billing:</strong> {consultation.patientBillStatus || "Unpaid"}</Typography>
+        </Box>
       </Stack>
     );
   }
@@ -284,7 +309,7 @@ export function AssessmentRecordDetails({
         <Typography variant="body2">Duration: {record.durationSeconds ?? "-"}s</Typography>
         <Typography variant="body2">Resolution: {record.resolution || "-"}</Typography>
         <Typography variant="body2">FPS: {record.fps ?? "-"}</Typography>
-        <Typography variant="body2">Doctor: {record.doctorName || "Not Assigned"}</Typography>
+        <Typography variant="body2">Doctor ID: {record.doctorGeneratedId || "Not Assigned"}</Typography>
         {record.alertStatus && <Typography variant="body2">Alert Status: {record.alertStatus}</Typography>}
         {record.followUpAction && <Typography variant="body2">Follow Up: {record.followUpAction}</Typography>}
         {record.followUpDueDate && <Typography variant="body2">Follow Up Due: {record.followUpDueDate}</Typography>}
@@ -330,7 +355,7 @@ export function AssessmentRecordDetails({
               {record.notes.map((note) => (
                 <Box key={note.id} sx={{ border: "1px solid #ddd", borderRadius: 2, p: 1.5 }}>
                   <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                    {note.doctorName} {note.doctorGeneratedId ? `(${note.doctorGeneratedId})` : ""}
+                    Doctor ID: {note.doctorGeneratedId || note.doctorId || "Not assigned"}
                   </Typography>
                   <Typography variant="body2">{note.text}</Typography>
                 </Box>

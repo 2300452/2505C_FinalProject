@@ -7,6 +7,7 @@ import PersonOutlineOutlinedIcon from "@mui/icons-material/PersonOutlineOutlined
 import UploadFileOutlinedIcon from "@mui/icons-material/UploadFileOutlined";
 import EventAvailableOutlinedIcon from "@mui/icons-material/EventAvailableOutlined";
 import DescriptionOutlinedIcon from "@mui/icons-material/DescriptionOutlined";
+import ReceiptLongOutlinedIcon from "@mui/icons-material/ReceiptLongOutlined";
 import { Avatar, Box, Button, Stack, Typography, useTheme } from "@mui/material";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";
@@ -26,6 +27,8 @@ function Sidebar() {
     { label: "Dashboard", to: "/admin/dashboard", icon: <DashboardOutlinedIcon fontSize="small" /> },
     { label: "Create Staff", to: "/admin/create-user", icon: <PersonAddAltOutlinedIcon fontSize="small" /> },
     { label: "Manage Users", to: "/admin/users", icon: <GroupOutlinedIcon fontSize="small" /> },
+    { label: "Appointments", to: "/admin/appointments", icon: <EventAvailableOutlinedIcon fontSize="small" /> },
+    { label: "Billing", to: "/admin/billing", icon: <ReceiptLongOutlinedIcon fontSize="small" /> },
   ];
 
   const doctorLinks = [
@@ -43,10 +46,12 @@ function Sidebar() {
     { label: "Medical Records", to: "/patient/records", icon: <DescriptionOutlinedIcon fontSize="small" /> },
     { label: "Book Appointment", to: "/patient/book-appointment", icon: <EventAvailableOutlinedIcon fontSize="small" /> },
     { label: "My Appointments", to: "/patient/appointments", icon: <GroupOutlinedIcon fontSize="small" /> },
+    { label: "Billing", to: "/patient/billing", icon: <ReceiptLongOutlinedIcon fontSize="small" /> },
   ];
 
   const links =
     user?.role === "Admin" ? adminLinks : user?.role === "Doctor" ? doctorLinks : patientLinks;
+  const displayName = user?.role === "Admin" ? user?.name : user?.generatedId;
 
   return (
     <Box
@@ -77,18 +82,20 @@ function Sidebar() {
         >
           <Stack direction="row" spacing={1.5} alignItems="center">
             <Avatar sx={{ bgcolor: shell.primary, color: "#ffffff", fontWeight: 700 }}>
-              {user.name?.[0] || "U"}
+              {displayName?.[0] || "U"}
             </Avatar>
             <Box>
               <Typography variant="body2" sx={{ fontWeight: 700, color: shell.heading }}>
                 Welcome
               </Typography>
               <Typography variant="caption" sx={{ color: shell.sidebarText, display: "block" }}>
-                {user.name}
+                {displayName}
               </Typography>
-              <Typography variant="caption" sx={{ color: shell.sidebarText, opacity: 0.8 }}>
-                {user.generatedId}
-              </Typography>
+              {user.role === "Admin" && (
+                <Typography variant="caption" sx={{ color: shell.sidebarText, opacity: 0.8 }}>
+                  {user.generatedId}
+                </Typography>
+              )}
             </Box>
           </Stack>
         </Box>
