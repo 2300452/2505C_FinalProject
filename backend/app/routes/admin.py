@@ -187,6 +187,14 @@ def validate_appointment_slot(slot_time) -> None:
         )
 
 
+def validate_appointment_not_in_past(appointment_date, appointment_time) -> None:
+    if datetime.combine(appointment_date, appointment_time) <= datetime.now():
+        raise HTTPException(
+            status_code=400,
+            detail="Appointments must be booked for a future date and time.",
+        )
+
+
 def ensure_slot_is_available(db: Session, appointment_date, appointment_time, exclude_appointment_id: int | None = None) -> None:
     query = db.query(Appointment).filter(
         Appointment.appointment_date == appointment_date,
@@ -444,6 +452,7 @@ def reschedule_appointment(payload: AppointmentRescheduleRequest, db: Session = 
         raise HTTPException(status_code=404, detail="Appointment not found")
 
     validate_appointment_slot(payload.appointment_time)
+    validate_appointment_not_in_past(payload.appointment_date, payload.appointment_time)
     ensure_slot_is_available(
         db,
         payload.appointment_date,

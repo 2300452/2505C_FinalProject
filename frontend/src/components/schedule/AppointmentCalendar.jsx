@@ -76,6 +76,8 @@ function AppointmentCalendar({
   );
 
   const selectedDateKey = toDateKey(selectedDate);
+  const todayKey = toDateKey(new Date());
+  const currentTime = new Date().toTimeString().slice(0, 5);
 
   const bookedByDate = useMemo(() => {
     return appointments.reduce((accumulator, appointment) => {
@@ -157,16 +159,18 @@ function AppointmentCalendar({
             const dateKey = toDateKey(dateItem);
             const isSelected = dateKey === selectedDateKey;
             const bookedSlots = bookedByDate[dateKey];
+            const isPastDate = dateKey < todayKey;
             const isFullyBooked =
               highlightFullyBookedDates &&
               bookedSlots &&
               bookedSlots.size >= SLOT_TIMES.length;
+            const isBlocked = isPastDate || isFullyBooked;
 
             return (
               <Button
                 key={dateKey}
                 onClick={() => onDateSelect?.(dateKey)}
-                disabled={readOnly ? false : false}
+                disabled={!readOnly && isBlocked}
                 sx={{
                   minHeight: patientFriendly ? 68 : 54,
                   borderRadius: 3,
@@ -175,12 +179,17 @@ function AppointmentCalendar({
                   color: isSelected ? "#ffffff" : shell.heading,
                   bgcolor: isSelected
                     ? shell.primary
-                    : isFullyBooked
+                    : isBlocked
                       ? "#2a2a2a"
                       : shell.primarySoft,
-                  opacity: isFullyBooked && !isSelected ? 0.9 : 1,
+                  opacity: isBlocked && !isSelected ? 0.9 : 1,
                   "&:hover": {
                     bgcolor: isSelected ? shell.primary : shell.secondary,
+                  },
+                  "&.Mui-disabled": {
+                    bgcolor: "#2a2a2a",
+                    color: "#ffffff",
+                    opacity: 0.9,
                   },
                 }}
               >
@@ -222,8 +231,11 @@ function AppointmentCalendar({
         >
           {SLOT_TIMES.map((slot) => {
             const isBooked = selectedDayBookings.has(slot);
+            const isPastTime = selectedDateKey === todayKey && slot <= currentTime;
+            const isPastDate = selectedDateKey && selectedDateKey < todayKey;
+            const isBlockedSlot = Boolean(isBooked || isPastDate || isPastTime);
             const isSelected = selectedTime === slot;
-            const isDisabled = isBooked || (!selectedDateKey && !readOnly);
+            const isDisabled = isBlockedSlot || (!selectedDateKey && !readOnly);
 
             return (
               <Button
@@ -235,12 +247,12 @@ function AppointmentCalendar({
                   borderRadius: 3,
                   fontSize: patientFriendly ? 18 : 14,
                   fontWeight: 700,
-                  bgcolor: isBooked ? "#1f1f1f" : isSelected ? shell.primary : shell.primarySoft,
-                  color: isBooked || isSelected ? "#ffffff" : shell.heading,
+                  bgcolor: isBlockedSlot ? "#1f1f1f" : isSelected ? shell.primary : shell.primarySoft,
+                  color: isBlockedSlot || isSelected ? "#ffffff" : shell.heading,
                   "&.Mui-disabled": {
-                    bgcolor: isBooked ? "#1f1f1f" : shell.primarySoft,
-                    color: isBooked ? "#ffffff" : shell.heading,
-                    opacity: isBooked ? 1 : 0.95,
+                    bgcolor: isBlockedSlot ? "#1f1f1f" : shell.primarySoft,
+                    color: isBlockedSlot ? "#ffffff" : shell.heading,
+                    opacity: isBlockedSlot ? 1 : 0.95,
                   },
                 }}
               >

@@ -374,6 +374,14 @@ def validate_appointment_slot(slot_time: time) -> None:
         )
 
 
+def validate_appointment_not_in_past(slot_date: date, slot_time: time) -> None:
+    if datetime.combine(slot_date, slot_time) <= datetime.now():
+        raise HTTPException(
+            status_code=400,
+            detail="Appointments must be booked for a future date and time.",
+        )
+
+
 def ensure_slot_is_available(
     db: Session,
     slot_date: date,
@@ -510,6 +518,7 @@ def create_appointment(payload: AppointmentCreateRequest, db: Session = Depends(
         raise HTTPException(status_code=400, detail="Patient already has an active appointment.")
 
     validate_appointment_slot(payload.appointment_time)
+    validate_appointment_not_in_past(payload.appointment_date, payload.appointment_time)
     ensure_slot_is_available(db, payload.appointment_date, payload.appointment_time)
 
     appointment = Appointment(
